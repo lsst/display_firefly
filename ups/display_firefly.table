@@ -1,0 +1,4 @@
+setupRequired(afw)
+setupRequired(firefly)
+
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
