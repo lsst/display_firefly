@@ -38,6 +38,7 @@ import lsst.afw.display.displayLib as displayLib
 
 try:
     import FireflyClient
+    _fireflyClient = None
 except ImportError, e:
     print("Cannot import firefly: %s" % (e), file=sys.stderr)
 
@@ -53,37 +54,44 @@ def fireflyVersion():
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-def __handleCallbacks(event):
-    return
-
-    data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
-    if data.get('type') == "POINT":
-        print("Event Received: %s" % data.get('id'))
-        sys.stdout.flush()
-
-try:
-    self_client
-except NameError:
-    try:
-        host="localhost"
-        port=8080
-        name="afw"
-
-        self_client = FireflyClient.FireflyClient("%s:%d" % (host, port), name)
-        self_client.launchBrowser()
-        self_client.addListener(__handleCallbacks)
-    except Exception as e:
-        raise RuntimeError("Unable to connect to client: %s" % e)
-
 class DisplayImpl(virtualDevice.DisplayImpl):
     """Device to talk to a firefly display"""
 
-    def __init__(self, display, verbose=False, *args, **kwargs):
+    @staticmethod
+    def __handleCallbacks(event):
+        if 'type' in event['data']:
+            if event['data']['type']=='AREA_SELECT':
+                print('*************area select')
+                pParams= { 'URL' : 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits','ColorTable' : '9'}
+                plotId = 3
+                global _fireflyClient
+                status= _fireflyClient.showFits(fileOnServer=None, plotId=plotId, additionalParams=pParams)
+
+
+        print("RHL", event)
+        return
+        data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
+        if data.get('type') == "POINT":
+            print("Event Received: %s" % data.get('id'))
+            sys.stdout.flush()
+
+    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
             print("Opening firefly device %s" % (self.display.frame if self.display else "[None]"))
 
+        global _fireflyClient
+        if not _fireflyClient:
+            try:
+                _fireflyClient = FireflyClient.FireflyClient("%s:%d" % (host, port), name)
+                _fireflyClient.launchBrowser()
+                _fireflyClient.addListener(self.__handleCallbacks)
+            except Exception as e:
+                raise RuntimeError("Unable to connect to client: %s" % e)
+
+        self._isBuffered = False
+        self._regions = []
         self._regionLayerId = None
         self._fireflyFitsID = None
         self._additionalParams = {}
@@ -98,7 +106,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """
 
         if self._regionLayerId:
-            self_client.removeRegion(self._regionLayerId) # clear overlays
+            _fireflyClient.removeRegion(self._regionLayerId) # plotId=self.display.frame
             self._regionLayerId = None
 
         with tempfile.TemporaryFile() as fd:
@@ -106,27 +114,48 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             fd.flush()
             fd.seek(0, 0)
 
-            self._fireflyFitsID = self_client.uploadFitsData(fd)
+            self._fireflyFitsID = _fireflyClient.uploadFitsData(fd)
             self._additionalParams=dict(RangeValues=self.__getRangeString(),
                                         Title=title,
                                         )
-            ret = self_client.showFits(self._fireflyFitsID, plotID=self.display.frame,
-                                       additionalParams=self._additionalParams)
+            ret = _fireflyClient.showFits(self._fireflyFitsID, plotId=self.display.frame,
+                                          additionalParams=self._additionalParams)
 
         if not ret["success"]:
             raise RuntimeError("Display failed")
 
-    def _uploadTextData(self, regions):
+    def _buffer(self, enable=True):
+        """!Enable or disable buffering of writes to the display
+        \param enable  True or False, as appropriate
+        """
+        self._isBuffered = enable
+
+    def _flush(self):
+        """!Flush any I/O buffers
+        """
+        if not self._regions:
+            return
+        
+        if self.verbose:
+            print("Flushing %d regions" % len(self._regions))
+
         self._regionLayerId = self._getRegionLayerId()
-        self_client.overlayRegionData(regions, # plotID=self.display.frame,
-                                      regionLayerId=self._regionLayerId)
+        _fireflyClient.overlayRegionData(self._regions, # plotId=self.display.frame,
+                                         regionLayerId=self._regionLayerId)
+        self._regions = []
+
+    def _uploadTextData(self, regions):
+        self._regions += regions
+        
+        if not self._isBuffered:
+            self._flush()
 
     def _close(self):
         """Called when the device is closed"""
         if self.verbose:
             print("Closing firefly device %s" % (self.display.frame if self.display else "[None]"))
-        self_client.disconnect()
-        self_client.session.close()
+        _fireflyClient.disconnect()
+        _fireflyClient.session.close()
 
     def _dot(self, symb, c, r, size, ctype, fontFamily="helvetica", textAngle=None):
         """Draw a symbol onto the specified DS9 frame at (col,row) = (c,r) [0-based coordinates]
@@ -143,40 +172,27 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     N.b. objects derived from BaseCore include Axes and Quadrupole.
     """
-        if False:                       # firefly doesn't (currently) default to image
-            self._uploadTextData(ds9Regions.dot(symb, c, r, size, ctype, fontFamily, textAngle))
-        else:
-            regions = []
-            for reg in ds9Regions.dot(symb, c, r, size, ctype, fontFamily, textAngle):
-                regions.append(re.sub(r"(circle|line|point|text) ", r"image; \1 ", reg))
-
-            self._uploadTextData(regions)
+        self._uploadTextData(ds9Regions.dot(symb, c, r, size, ctype, fontFamily, textAngle))
 
     def _drawLines(self, points, ctype):
         """Connect the points, a list of (col,row)
         Ctype is the name of a colour (e.g. 'red')"""
 
-        if False:                       # firefly doesn't (currently) default to image
-            self._uploadTextData(ds9Regions.drawLines(points, ctype))
-        else:
-            regions = []
-            for reg in ds9Regions.drawLines(points, ctype):
-                regions.append(re.sub(r"line ", r"image; line ", reg))
-
-            self._uploadTextData(regions)
+        self._uploadTextData(ds9Regions.drawLines(points, ctype))
 
     def _erase(self):
         """Erase the specified DS9 frame"""
         if self._regionLayerId:
-            self_client.removeRegion(self._regionLayerId)
+            _fireflyClient.removeRegion(self._regionLayerId) # plotId=self.display.frame
             self._regionLayerId = None
 
     def _setCallback(self, what, func):
-        status = self_client.addExtension('POINT', what,
-                                          plotId=self.display.frame,
-                                          extensionId=what)
-        if not status['success']:
-            pass
+        if func != interface.noop_callback:
+            status = _fireflyClient.addExtension('POINT' if False else 'AREA_SELECT', what,
+                                                 plotId=self.display.frame,
+                                                 extensionId=what)
+            if not status['success']:
+                pass
 
     def _getEvent(self):
         """Return an event generated by a keypress or mouse click
@@ -223,18 +239,23 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._stretchUnit = unit
 
         self._additionalParams["RangeValues"] = self.__getRangeString()
-
-        if self._fireflyFitsID:
-            self_client.showFits(self._fireflyFitsID, plotID=self.display.frame,
-                                 additionalParams=self._additionalParams)
+            
+        if False:
+            if self._fireflyFitsID:
+                _fireflyClient.showFits(self._fireflyFitsID, plotId=self.display.frame,
+                                        additionalParams=self._additionalParams)
+        else:
+            if self.display:
+                print("RHL stretch", self.display.frame, self.__getRangeString())
+                _fireflyClient.stretch(self.display.frame, self.__getRangeString())
 
     def __getRangeString(self):
         if self._stretchMin == "zscale":
-            return self_client.createRangeValuesZScale(self._stretchAlgorithm,
-                                           zscaleContrast=25, zscaleSamples=600, zscaleSamplesPerLine=120)
+            return _fireflyClient.createRangeValuesZScale(
+                self._stretchAlgorithm, zscaleContrast=25, zscaleSamples=600, zscaleSamplesPerLine=120)
         else:
-            return self_client.createRangeValuesStandard(self._stretchAlgorithm,
-                                                     self._stretchUnit, self._stretchMin, self._stretchMax)
+            return _fireflyClient.createRangeValuesStandard(
+                self._stretchAlgorithm, self._stretchUnit, self._stretchMin, self._stretchMax)
 
     def _show(self):
         """Show the requested window"""
@@ -245,9 +266,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _zoom(self, zoomfac):
         """Zoom frame by specified amount"""
 
-        self._additionalParams["InitType"] = "STANDARD"
-        self._additionalParams["InitZoomLevel"] = zoomfac
+        _fireflyClient.zoom(plotId=self.display.frame, factor=zoomfac)
 
-        if self._fireflyFitsID:
-            self_client.showFits(self._fireflyFitsID, plotID=self.display.frame,
-                                 additionalParams=self._additionalParams)
+    def _pan(self, colc, rowc):
+        _fireflyClient.pan(plotId=self.display.frame, x=colc, y=rowc)
+
+            
