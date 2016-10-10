@@ -26,16 +26,18 @@
 
 from __future__ import absolute_import, division, print_function
 
+import re
 import sys
 import tempfile
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
 import lsst.afw.display.ds9Regions as ds9Regions
-import lsst.afw.display.displayLib as displayLib
+import lsst.afw.image as afwImage
+import lsst.afw.math as afwMath
 
 try:
-    import FireflyClient
+    import firefly_client
     _fireflyClient = None
 except ImportError as e:
     print("Cannot import firefly: %s" % (e), file=sys.stderr)
@@ -66,9 +68,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 print('*************area select')
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
-                plotId = 3
+                plot_id = 3
                 global _fireflyClient
-                _fireflyClient.show_fits(fileOnServer=None, plotId=plotId, additionalParams=pParams)
+                _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
         print("RHL", event)
         return
@@ -86,7 +88,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                _fireflyClient = FireflyClient.FireflyClient("%s:%d" % (host, port), name)
+                _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port), name)
                 _fireflyClient.launch_browser()
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
@@ -96,9 +98,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._regions = []
         self._regionLayerId = None
         self._fireflyFitsID = None
-        self._additionalParams = {}
+        self._maskIds = []
 
-        self._scale('Linear', 1, 99, 'Percent')
+        #self._scale('linear', 1, 99, 'percent')
 
     def _getRegionLayerId(self):
         return "lsstRegions%s" % self.display.frame if self.display else "None"
@@ -107,24 +109,55 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """Display an Image and/or Mask on a Firefly display
         """
 
-        if self._regionLayerId:
-            _fireflyClient.delete_region_layer(self._regionLayerId) # plotId=self.display.frame
-            self._regionLayerId = None
+        if re.search("ImageF", repr(image)):
+            mskimg = afwImage.MaskedImageF(image, mask)
+            exp = afwImage.ExposureF(mskimg, wcs)
+        elif re.search("ImageU", repr(image)):
+            mskimg = afwImage.MaskedImageU(image, mask)
+            exp = afwImage.ExposureF(mskimg, wcs)
+        elif re.search("ImageD", repr(image)):
+            mskimg = afwImage.MaskedImageD(image, mask)
+            exp = afwImage.ExposureF(mskimg, wcs)
+        elif re.search("ImageI", repr(image)):
+            mskimg = afwImage.MaskedImageI(image, mask)
+            exp = afwImage.ExposureF(mskimg, wcs)
+        elif re.search("ImageL", repr(image)):
+            mskimg = afwImage.MaskedImageL(image, mask)
+            exp = afwImage.ExposureF(mskimg, wcs)
+        else:
+            raise RuntimeError("Unknown image type")
 
-        with tempfile.TemporaryFile() as fd:
-            displayLib.writeFitsImage(fd.fileno(), image, wcs, title)
-            fd.flush()
-            fd.seek(0, 0)
 
-            self._fireflyFitsID = _fireflyClient.upload_fits_data(fd)
-            self._additionalParams = dict(RangeValues=self.__getRangeString(),
-                                          Title=title,
-                                          )
-            ret = _fireflyClient.show_fits(self._fireflyFitsID, plotId=self.display.frame,
-                                          additionalParams=self._additionalParams)
+        if image:
+            self._erase()
 
-        if not ret["success"]:
-            raise RuntimeError("Display failed")
+            with tempfile.NamedTemporaryFile() as fd:
+                exp.writeFits(fd.name)
+                fd.flush()
+
+                self._fireflyFitsID = _fireflyClient.upload_file(fd.name)
+                ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=self.display.frame,
+                                               Title=title, MultiImageIdx=0)
+            if not ret["success"]:
+                raise RuntimeError("Display of image failed")
+
+        if mask:
+                mdict = mask.getMaskPlaneDict()
+                usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
+                for k in mdict:
+                    if ((1 << mdict[k]) & usedPlanes):
+                        _fireflyClient.add_mask(bit_number=mdict[k], image_number=1,
+                                                plot_id=self.display.frame,
+                                                mask_id=k, 
+                                                color=self.display.getMaskPlaneColor(k),
+                                                file_on_server=self._fireflyFitsID)
+                        self._maskIds.append(k)
+
+    def _remove_masks(self):
+        """Remove mask layers"""
+        for k in self._maskIds:
+            _fireflyClient.remove_mask(plot_id=self.display.frame, mask_id=k)
+        self._maskIds = []
 
     def _buffer(self, enable=True):
         """!Enable or disable buffering of writes to the display
@@ -142,8 +175,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             print("Flushing %d regions" % len(self._regions))
 
         self._regionLayerId = self._getRegionLayerId()
-        _fireflyClient.overlay_region_data(self._regions, # plotId=self.display.frame,
-                                           regionLayerId=self._regionLayerId)
+        _fireflyClient.add_region_data(region_data=self._regions, plot_id=self.display.frame,
+                                       region_layer_id=self._regionLayerId)
         self._regions = []
 
     def _uploadTextData(self, regions):
@@ -185,23 +218,25 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _erase(self):
         """Erase the specified DS9 frame"""
         if self._regionLayerId:
-            _fireflyClient.delete_region_data(self._regionLayerId) # plotId=self.display.frame
+            _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=self.display.frame)
             self._regionLayerId = None
+        self._remove_masks()
+        _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
+                                              action_type='ImagePlotCntlr.deletePlotView',
+                                              payload={'plotId': self.display.frame})
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
-            status = _fireflyClient.add_extension('POINT' if False else 'AREA_SELECT', what,
-                                                  plotId=self.display.frame,
-                                                  extensionId=what)
+            status = _fireflyClient.add_extension('POINT' if False else 'AREA_SELECT', title=what,
+                                                  plot_id=self.display.frame,
+                                                  extension_id=what)
             if not status['success']:
                 pass
 
     def _getEvent(self):
         """Return an event generated by a keypress or mouse click
         """
-        from interface import Event
-
-        ev = Event("q")
+        ev = interface.Event("q")
 
         if self.verbose:
             print("virtual[%s]._getEvent() -> %s" % (self.display.frame, ev))
@@ -212,57 +247,88 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     #
 
     def _scale(self, algorithm, min, max, unit=None, *args, **kwargs):
-        stretchAlgorithms = ("Linear", "Log", "LogLog", "Equal", "Squared", "Sqrt")
+        stretch_algorithms = ('linear', 'log', 'loglog', 'equal', 'squared', 'sqrt',
+                              'asinh', 'powerlaw_gamma')
+        interval_methods = ('percent', 'maxmin', 'absolute', 'zscale', 'sigma')
+        #
         #
         # Normalise algorithm's case
         #
         if algorithm:
-            algorithm = dict((a.lower(), a) for a in stretchAlgorithms).get(algorithm.lower(), algorithm)
+            algorithm = dict((a.lower(), a) for a in stretch_algorithms).get(algorithm.lower(), algorithm)
 
-            if algorithm not in stretchAlgorithms:
+            if algorithm not in stretch_algorithms:
                 raise FireflyError('Algorithm %s is invalid; please choose one of "%s"' %
-                                   (algorithm, '", "'.join(stretchAlgorithms)))
+                                   (algorithm, '", "'.join(stretch_algorithms)))
             self._stretchAlgorithm = algorithm
+        else:
+            algorithm = 'linear'
 
-        if min == "minmax":
-            unit = "Percent"
+        if min == 'minmax':
+            interval_type = 'percent'
+            unit = 'percent'
             min, max = 0, 100
-        elif min == "zscale":
-            pass
+        elif min == 'zscale':
+            interval_type = 'zscale'
 
         if not unit:
-            unit = "Absolute"
+            unit = 'absolute'
 
-        units = ("Percent", "Absolute", "Sigma")
+        units = ('percent', 'absolute', 'sigma')
         if unit not in units:
             raise FireflyError('Unit %s is invalid; please choose one of "%s"' % (unit, '", "'.join(units)))
+
+        if unit == 'sigma':
+            interval_type = 'sigma'
+        if unit == 'absolute' and interval_type is None:
+            interval_type = 'absolute'
+        if unit == 'percent':
+            interval_type = 'percent'
 
         self._stretchMin = min
         self._stretchMax = max
         self._stretchUnit = unit
 
-        self._additionalParams["RangeValues"] = self.__getRangeString()
+        if interval_type not in interval_methods:
+            raise FireflyError('Interval method %s is invalid' % interval_type)
 
-        if False:
-            if self._fireflyFitsID:
-                _fireflyClient.show_fits(self._fireflyFitsID, plotId=self.display.frame,
-                                         additionalParams=self._additionalParams)
+        if interval_type is not 'zscale':
+            _fireflyClient.set_stretch(self.display.frame, stype=interval_type, algorithm=algorithm,
+                                       lower_value=min, upper_value=max)
         else:
-            if self.display:
-                print("RHL stretch", self.display.frame, self.__getRangeString())
-                _fireflyClient.set_stretch(self.display.frame, self.__getRangeString())
+            if 'zscale_constrast' not in kwargs:
+                kwargs['zscale_contrast'] = 25
+            if 'zscale_samples' not in kwargs:
+                kwargs['zscale_samples'] = 600
+            if 'zscale_samples_perline' not in kwargs:
+                kwargs['zscale_samples_perline'] = 120
+            _fireflyClient.set_stretch(self.display.frame, stype='zscale', algorithm=algorithm,
+                                       zscale_contrast=kwargs['zscale_contrast'],
+                                       zscale_samples=kwargs['zscale_samples'],
+                                       zscale_samples_perline=kwargs['zscale_samples_perline'])
 
-    def __getRangeString(self):
-        if self._stretchMin == "zscale":
-            return _fireflyClient._create_rangevalues_zscale(
-                self._stretchAlgorithm, zscaleContrast=25, zscaleSamples=600, zscaleSamplesPerLine=120)
+    def _setMaskTransparency(self, transparency, maskplane):
+        """Specify mask transparency (percent); or None to not set it when loading masks"""
+        if maskplane is not None:
+            masklist = [maskplane]
         else:
-            return _fireflyClient._create_rangevalues_standard(
-                self._stretchAlgorithm, self._stretchUnit, self._stretchMin, self._stretchMax)
+            masklist = self._maskIds
+        for k in masklist:
+            _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
+                                                  action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
+                                                  payload={'plotId': self.display.frame,
+                                                           'imageOverlayId': k,
+                                                           'attributes': {'opacity': transparency/100.},
+                                                           'doReplot': False})
+
+    def _getMaskTransparency(self, maskplane):
+        """Return the current ds9's mask transparency"""
+
+        pass
 
     def _show(self):
         """Show the requested window"""
-        pass
+        _fireflyClient.launch_browser(force=True)
     #
     # Zoom and Pan
     #
@@ -270,7 +336,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _zoom(self, zoomfac):
         """Zoom frame by specified amount"""
 
-        _fireflyClient.set_zoom(plotId=self.display.frame, factor=zoomfac)
+        _fireflyClient.set_zoom(plot_id=self.display.frame, factor=zoomfac)
 
     def _pan(self, colc, rowc):
-        _fireflyClient.set_pan(plotId=self.display.frame, x=colc, y=rowc)
+        _fireflyClient.set_pan(plot_id=self.display.frame, x=colc, y=rowc)

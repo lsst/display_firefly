@@ -21,4 +21,4 @@
 #
 
 from .version import *
-from firefly import *
+from .firefly import *
