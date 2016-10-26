@@ -25,6 +25,7 @@
 ## \brief Definitions to talk to firefly from python
 
 from __future__ import absolute_import, division, print_function
+from past.builtins import long
 
 import re
 import sys
@@ -40,7 +41,7 @@ try:
     import firefly_client
     _fireflyClient = None
 except ImportError as e:
-    print("Cannot import firefly: %s" % (e), file=sys.stderr)
+    print("Cannot import firefly_client: %s" % (e), file=sys.stderr)
 
 
 class FireflyError(Exception):
@@ -127,7 +128,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         else:
             raise RuntimeError("Unknown image type")
 
-
+        if title == "":
+            title=str(self.display.frame)
         if image:
             self._erase()
 
@@ -136,7 +138,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 fd.flush()
 
                 self._fireflyFitsID = _fireflyClient.upload_file(fd.name)
-                ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=self.display.frame,
+                ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
                                                Title=title, MultiImageIdx=0)
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
@@ -147,7 +149,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 for k in mdict:
                     if ((1 << mdict[k]) & usedPlanes):
                         _fireflyClient.add_mask(bit_number=mdict[k], image_number=1,
-                                                plot_id=self.display.frame,
+                                                plot_id=str(self.display.frame),
                                                 mask_id=k, 
                                                 color=self.display.getMaskPlaneColor(k),
                                                 file_on_server=self._fireflyFitsID)
@@ -156,7 +158,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _remove_masks(self):
         """Remove mask layers"""
         for k in self._maskIds:
-            _fireflyClient.remove_mask(plot_id=self.display.frame, mask_id=k)
+            _fireflyClient.remove_mask(plot_id=str(self.display.frame), mask_id=k)
         self._maskIds = []
 
     def _buffer(self, enable=True):
@@ -175,7 +177,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             print("Flushing %d regions" % len(self._regions))
 
         self._regionLayerId = self._getRegionLayerId()
-        _fireflyClient.add_region_data(region_data=self._regions, plot_id=self.display.frame,
+        _fireflyClient.add_region_data(region_data=self._regions, plot_id=str(self.display.frame),
                                        region_layer_id=self._regionLayerId)
         self._regions = []
 
@@ -218,17 +220,17 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _erase(self):
         """Erase the specified DS9 frame"""
         if self._regionLayerId:
-            _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=self.display.frame)
+            _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
             self._regionLayerId = None
         self._remove_masks()
         _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
                                               action_type='ImagePlotCntlr.deletePlotView',
-                                              payload={'plotId': self.display.frame})
+                                              payload={'plotId': str(self.display.frame)})
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
             status = _fireflyClient.add_extension('POINT' if False else 'AREA_SELECT', title=what,
-                                                  plot_id=self.display.frame,
+                                                  plot_id=str(self.display.frame),
                                                   extension_id=what)
             if not status['success']:
                 pass
@@ -293,7 +295,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             raise FireflyError('Interval method %s is invalid' % interval_type)
 
         if interval_type is not 'zscale':
-            _fireflyClient.set_stretch(self.display.frame, stype=interval_type, algorithm=algorithm,
+            _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
                                        lower_value=min, upper_value=max)
         else:
             if 'zscale_constrast' not in kwargs:
@@ -302,7 +304,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 kwargs['zscale_samples'] = 600
             if 'zscale_samples_perline' not in kwargs:
                 kwargs['zscale_samples_perline'] = 120
-            _fireflyClient.set_stretch(self.display.frame, stype='zscale', algorithm=algorithm,
+            _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
                                        zscale_contrast=kwargs['zscale_contrast'],
                                        zscale_samples=kwargs['zscale_samples'],
                                        zscale_samples_perline=kwargs['zscale_samples_perline'])
@@ -316,13 +318,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         for k in masklist:
             _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
                                                   action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
-                                                  payload={'plotId': self.display.frame,
+                                                  payload={'plotId': str(self.display.frame),
                                                            'imageOverlayId': k,
                                                            'attributes': {'opacity': transparency/100.},
                                                            'doReplot': False})
 
     def _getMaskTransparency(self, maskplane):
-        """Return the current ds9's mask transparency"""
+        """Return the current mask's transparency"""
 
         pass
 
@@ -336,7 +338,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _zoom(self, zoomfac):
         """Zoom frame by specified amount"""
 
-        _fireflyClient.set_zoom(plot_id=self.display.frame, factor=zoomfac)
+        _fireflyClient.set_zoom(plot_id=str(self.display.frame), factor=zoomfac)
 
     def _pan(self, colc, rowc):
-        _fireflyClient.set_pan(plot_id=self.display.frame, x=colc, y=rowc)
+        _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
