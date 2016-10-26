@@ -93,7 +93,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 _fireflyClient.launch_browser()
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
-                raise RuntimeError("Unable to connect to client: %s" % e)
+                raise RuntimeError("Unable to connect to client %s:%d: %s" % (host, port, e))
 
         self._isBuffered = False
         self._regions = []
