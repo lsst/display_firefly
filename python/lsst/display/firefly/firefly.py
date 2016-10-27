@@ -74,7 +74,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 global _fireflyClient
                 _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
-        lsst.log.debug("RHL", event)
+        lsst.log.debug("RHL {}".format(event))
         return
         data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
         if data.get('type') == "POINT":
@@ -100,6 +100,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._regionLayerId = None
         self._fireflyFitsID = None
         self._maskIds = []
+        self._maskDict = {}
 
         #self._scale('linear', 1, 99, 'percent')
 
@@ -144,11 +145,12 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 raise RuntimeError("Display of image failed")
 
         if mask:
-                mdict = mask.getMaskPlaneDict()
+                self._maskDict = mask.getMaskPlaneDict()
                 usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
-                for k in mdict:
-                    if ((1 << mdict[k]) & usedPlanes):
-                        _fireflyClient.add_mask(bit_number=mdict[k], image_number=1,
+                for k in self._maskDict:
+                    if ((1 << self._maskDict[k]) & usedPlanes):
+                        _fireflyClient.add_mask(bit_number=self._maskDict[k], 
+                                                image_number=1,
                                                 plot_id=str(self.display.frame),
                                                 mask_id=k, 
                                                 color=self.display.getMaskPlaneColor(k),
@@ -327,6 +329,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """Return the current mask's transparency"""
 
         pass
+
+    def _setMaskPlaneColor(self, maskplane, color):
+        """Specify mask color """
+        _fireflyClient.remove_mask(plot_id=str(self.display.frame),
+                                   mask_id=maskplane)
+        if (color != 'ignore'):
+            _fireflyClient.add_mask(bit_number=self._maskDict[maskplane], 
+                                image_number=1,
+                                plot_id=str(self.display.frame),
+                                mask_id=maskplane,
+                                color=self.display.getMaskPlaneColor(maskplane),
+                                file_on_server=self._fireflyFitsID)
 
     def _show(self):
         """Show the requested window"""
