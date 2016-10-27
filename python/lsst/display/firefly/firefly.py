@@ -36,6 +36,7 @@ import lsst.afw.display.virtualDevice as virtualDevice
 import lsst.afw.display.ds9Regions as ds9Regions
 import lsst.afw.image as afwImage
 import lsst.afw.math as afwMath
+import lsst.log
 
 try:
     import firefly_client
@@ -66,19 +67,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def __handleCallbacks(event):
         if 'type' in event['data']:
             if event['data']['type'] == 'AREA_SELECT':
-                print('*************area select')
+                lsst.log.debug('*************area select')
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
                 plot_id = 3
                 global _fireflyClient
                 _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
-        print("RHL", event)
+        lsst.log.debug("RHL", event)
         return
         data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
         if data.get('type') == "POINT":
-            print("Event Received: %s" % data.get('id'))
-            sys.stdout.flush()
+            lsst.log.debug("Event Received: %s" % data.get('id'))
 
     def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
