@@ -27,14 +27,12 @@
 from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
-import re
-import sys
 import tempfile
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
 import lsst.afw.display.ds9Regions as ds9Regions
-import lsst.afw.image as afwImage
+import lsst.afw.display.displayLib as displayLib
 import lsst.afw.math as afwMath
 import lsst.log
 
@@ -42,7 +40,7 @@ try:
     import firefly_client
     _fireflyClient = None
 except ImportError as e:
-    print("Cannot import firefly_client: %s" % (e), file=sys.stderr)
+    raise RuntimeError("Cannot import firefly_client: %s" % (e))
 
 
 class FireflyError(Exception):
@@ -74,7 +72,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 global _fireflyClient
                 _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
-        lsst.log.debug("RHL {}".format(event))
+        lsst.log.debug("Callback event info: {}".format(event))
         return
         data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
         if data.get('type') == "POINT":
@@ -90,19 +88,24 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if not _fireflyClient:
             try:
                 _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port), name)
+            except Exception as e:
+                raise RuntimeError("Unable to connect websocket %s:%d: %s" % (host, port, e))
+            if (host == "localhost"):
                 _fireflyClient.launch_browser()
+            try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
-                raise RuntimeError("Unable to connect to client %s:%d: %s" % (host, port, e))
+                raise RuntimeError("Cannot add listener. Browser must be connected" +
+                                   "to %s:%d/firefly/lsst-api-triview.html;wsch=%s: %s" %
+                                   (host, port, name, e))
 
         self._isBuffered = False
         self._regions = []
         self._regionLayerId = None
         self._fireflyFitsID = None
+        self._fireflyMaskOnServer = None
         self._maskIds = []
         self._maskDict = {}
-
-        #self._scale('linear', 1, 99, 'percent')
 
     def _getRegionLayerId(self):
         return "lsstRegions%s" % self.display.frame if self.display else "None"
@@ -110,32 +113,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _mtv(self, image, mask=None, wcs=None, title=""):
         """Display an Image and/or Mask on a Firefly display
         """
-
-        if re.search("ImageF", repr(image)):
-            mskimg = afwImage.MaskedImageF(image, mask)
-            exp = afwImage.ExposureF(mskimg, wcs)
-        elif re.search("ImageU", repr(image)):
-            mskimg = afwImage.MaskedImageU(image, mask)
-            exp = afwImage.ExposureF(mskimg, wcs)
-        elif re.search("ImageD", repr(image)):
-            mskimg = afwImage.MaskedImageD(image, mask)
-            exp = afwImage.ExposureF(mskimg, wcs)
-        elif re.search("ImageI", repr(image)):
-            mskimg = afwImage.MaskedImageI(image, mask)
-            exp = afwImage.ExposureF(mskimg, wcs)
-        elif re.search("ImageL", repr(image)):
-            mskimg = afwImage.MaskedImageL(image, mask)
-            exp = afwImage.ExposureF(mskimg, wcs)
-        else:
-            raise RuntimeError("Unknown image type")
-
         if title == "":
-            title=str(self.display.frame)
+            title = str(self.display.frame)
         if image:
             self._erase()
 
             with tempfile.NamedTemporaryFile() as fd:
-                exp.writeFits(fd.name)
+                displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
 
                 self._fireflyFitsID = _fireflyClient.upload_file(fd.name)
@@ -145,16 +129,21 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 raise RuntimeError("Display of image failed")
 
         if mask:
+            with tempfile.NamedTemporaryFile() as fdm:
+                displayLib.writeFitsImage(fdm.name, mask, wcs)
+                fdm.flush()
+
+                self._fireflyMaskOnServer = _fireflyClient.upload_file(fdm.name)
                 self._maskDict = mask.getMaskPlaneDict()
                 usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
                 for k in self._maskDict:
                     if ((1 << self._maskDict[k]) & usedPlanes):
-                        _fireflyClient.add_mask(bit_number=self._maskDict[k], 
-                                                image_number=1,
+                        _fireflyClient.add_mask(bit_number=self._maskDict[k],
+                                                image_number=0,
                                                 plot_id=str(self.display.frame),
-                                                mask_id=k, 
+                                                mask_id=k,
                                                 color=self.display.getMaskPlaneColor(k),
-                                                file_on_server=self._fireflyFitsID)
+                                                file_on_server=self._fireflyMaskOnServer)
                         self._maskIds.append(k)
 
     def _remove_masks(self):
@@ -220,22 +209,25 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._uploadTextData(ds9Regions.drawLines(points, ctype))
 
     def _erase(self):
-        """Erase the specified DS9 frame"""
+        """Erase all overlays on the image"""
         if self._regionLayerId:
             _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
             self._regionLayerId = None
         self._remove_masks()
-        _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
-                                              action_type='ImagePlotCntlr.deletePlotView',
-                                              payload={'plotId': str(self.display.frame)})
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
-            status = _fireflyClient.add_extension('POINT' if False else 'AREA_SELECT', title=what,
-                                                  plot_id=str(self.display.frame),
-                                                  extension_id=what)
-            if not status['success']:
-                pass
+            try:
+                status = _fireflyClient.add_extension('POINT' if False else 'AREA_SELECT', title=what,
+                                                      plot_id=str(self.display.frame),
+                                                      extension_id=what)
+                if not status['success']:
+                    pass
+            except Exception as e:
+                raise RuntimeError("Cannot set callback. Browser must be (re)opened " +
+                                   "to http://%s:%d/firefly/lsst-api-triview.html;wsch=%s : %s" %
+                                   (_fireflyClient.host, _fireflyClient.port,
+                                    _fireflyClient.channel, e))
 
     def _getEvent(self):
         """Return an event generated by a keypress or mouse click
@@ -274,6 +266,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             min, max = 0, 100
         elif min == 'zscale':
             interval_type = 'zscale'
+        else:
+            interval_type = None
 
         if not unit:
             unit = 'absolute'
@@ -284,9 +278,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         if unit == 'sigma':
             interval_type = 'sigma'
-        if unit == 'absolute' and interval_type is None:
+        elif unit == 'absolute' and interval_type is None:
             interval_type = 'absolute'
-        if unit == 'percent':
+        elif unit == 'percent':
             interval_type = 'percent'
 
         self._stretchMin = min
@@ -335,12 +329,12 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         _fireflyClient.remove_mask(plot_id=str(self.display.frame),
                                    mask_id=maskplane)
         if (color != 'ignore'):
-            _fireflyClient.add_mask(bit_number=self._maskDict[maskplane], 
-                                image_number=1,
-                                plot_id=str(self.display.frame),
-                                mask_id=maskplane,
-                                color=self.display.getMaskPlaneColor(maskplane),
-                                file_on_server=self._fireflyFitsID)
+            _fireflyClient.add_mask(bit_number=self._maskDict[maskplane],
+                                    image_number=1,
+                                    plot_id=str(self.display.frame),
+                                    mask_id=maskplane,
+                                    color=self.display.getMaskPlaneColor(maskplane),
+                                    file_on_server=self._fireflyFitsID)
 
     def _show(self):
         """Show the requested window"""
