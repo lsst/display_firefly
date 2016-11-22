@@ -1,4 +1,4 @@
 setupRequired(afw)
-setupRequired(firefly)
+setupRequired(python_future)
 
 envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)

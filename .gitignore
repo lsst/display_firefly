@@ -10,6 +10,7 @@
 config.log
 doc/*.tag
 doc/html
+doc/xml
 doc/doxygen.conf
 python/lsst/display/firefly/version.py
 tests/.tests
