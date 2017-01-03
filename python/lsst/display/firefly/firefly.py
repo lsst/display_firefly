@@ -78,7 +78,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw", *args, **kwargs):
+    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw"):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
