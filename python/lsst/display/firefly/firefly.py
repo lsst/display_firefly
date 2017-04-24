@@ -78,8 +78,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="localhost", port=8080,
-                 name="afw", basedir="firefly", *args, **kwargs):
+    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw",
+                 basedir="firefly", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
@@ -98,7 +98,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
                 raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s:%d/%s/;wsch=%s: %s" %
+                                   "to %s:%d/%s/lsst-api-triview.html;wsch=%s: %s" %
                                    (host, port, basedir, name, e))
 
         self._isBuffered = False
