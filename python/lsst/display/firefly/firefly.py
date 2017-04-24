@@ -78,7 +78,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw", *args, **kwargs):
+    def __init__(self, display, verbose=False, host="localhost", port=8080,
+                 name="afw", basedir="firefly", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
@@ -87,7 +88,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port), name)
+                _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port),
+                                        channel=name, basedir=basedir, **kwargs)
             except Exception as e:
                 raise RuntimeError("Unable to connect websocket %s:%d: %s" % (host, port, e))
             if (host == "localhost"):
@@ -96,8 +98,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
                 raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s:%d/firefly/lsst-api-triview.html;wsch=%s: %s" %
-                                   (host, port, name, e))
+                                   "to %s:%d/%s/;wsch=%s: %s" %
+                                   (host, port, basedir, name, e))
 
         self._isBuffered = False
         self._regions = []
@@ -130,7 +132,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         if mask:
             with tempfile.NamedTemporaryFile() as fdm:
-                displayLib.writeFitsImage(fdm.name, mask, wcs)
+                displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
 
                 self._fireflyMaskOnServer = _fireflyClient.upload_file(fdm.name)
@@ -225,8 +227,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                     pass
             except Exception as e:
                 raise RuntimeError("Cannot set callback. Browser must be (re)opened " +
-                                   "to http://%s:%d/firefly/lsst-api-triview.html;wsch=%s : %s" %
-                                   (_fireflyClient.host, _fireflyClient.port,
+                                   "to %s%s : %s" %
+                                   (_fireflyClient.url_bw,
                                     _fireflyClient.channel, e))
 
     def _getEvent(self):
