@@ -28,6 +28,7 @@ from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
 import tempfile
+import os
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
@@ -120,7 +121,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if image:
             self._erase()
 
-            with tempfile.NamedTemporaryFile() as fd:
+            with tempfile.NamedTemporaryFile(suffix='.fits') as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
                 fd.seek(0,0)
@@ -132,7 +133,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 raise RuntimeError("Display of image failed")
 
         if mask:
-            with tempfile.NamedTemporaryFile() as fdm:
+            with tempfile.NamedTemporaryFile(suffix='.fits') as fdm:
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
                 fdm.seek(0,0)
@@ -206,6 +207,19 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     N.b. objects derived from BaseCore include Axes and Quadrupole.
     """
         self._uploadTextData(ds9Regions.dot(symb, c, r, size, ctype, fontFamily, textAngle))
+
+    def _overlayCatalog(self, sourceCat, **kwargs):
+        """ Upload a catalog and overlay on image display """
+        table = sourceCat.asAstropy()
+        table['ra'] = table['coord_ra'].to('deg')
+        table['dec'] = table['coord_dec'].to('deg')
+        with tempfile.NamedTemporaryFile(delete=False,
+                                         suffix='.csv') as fd:
+            table.write(fd.name, format='csv')
+
+        tbl_val = _fireflyClient.upload_file(fd.name)
+        os.remove(fd.name)
+        _fireflyClient.show_table(tbl_val)
 
     def _drawLines(self, points, ctype):
         """Connect the points, a list of (col,row)
