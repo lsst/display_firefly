@@ -123,10 +123,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
+                fd.seek(0,0)
+                self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
-                self._fireflyFitsID = _fireflyClient.upload_file(fd.name)
-                ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
-                                               Title=title, MultiImageIdx=0)
+            ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
+                                           Title=title, MultiImageIdx=0)
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
 
@@ -134,19 +135,21 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fdm:
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
+                fdm.seek(0,0)
+                self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
 
-                self._fireflyMaskOnServer = _fireflyClient.upload_file(fdm.name)
-                self._maskDict = mask.getMaskPlaneDict()
-                usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
-                for k in self._maskDict:
-                    if ((1 << self._maskDict[k]) & usedPlanes):
-                        _fireflyClient.add_mask(bit_number=self._maskDict[k],
-                                                image_number=0,
-                                                plot_id=str(self.display.frame),
-                                                mask_id=k,
-                                                color=self.display.getMaskPlaneColor(k),
-                                                file_on_server=self._fireflyMaskOnServer)
-                        self._maskIds.append(k)
+            self._maskDict = mask.getMaskPlaneDict()
+            usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
+            for k in self._maskDict:
+                if ((1 << self._maskDict[k]) & usedPlanes):
+                    _fireflyClient.add_mask(bit_number=self._maskDict[k],
+                                            image_number=0,
+                                            plot_id=str(self.display.frame),
+                                            mask_id=k,
+                                            title=k + ' - bit %d'%self._maskDict[k],
+                                            color=self.display.getMaskPlaneColor(k),
+                                            file_on_server=self._fireflyMaskOnServer)
+                    self._maskIds.append(k)
 
     def _remove_masks(self):
         """Remove mask layers"""
