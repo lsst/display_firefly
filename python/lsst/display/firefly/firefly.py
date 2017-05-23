@@ -218,7 +218,6 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if self._regionLayerId:
             _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
             self._regionLayerId = None
-        self._remove_masks()
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
