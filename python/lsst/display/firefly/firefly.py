@@ -342,7 +342,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        _fireflyClient.launch_browser(force=True)
+        _fireflyClient.launch_browser()
     #
     # Zoom and Pan
     #
