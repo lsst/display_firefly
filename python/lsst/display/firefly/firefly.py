@@ -78,7 +78,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw", *args, **kwargs):
+    def __init__(self, display, verbose=False, host="localhost", port=8080,
+                 name="afw", basedir="firefly", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
@@ -87,7 +88,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port), name)
+                _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port),
+                                        channel=name, basedir=basedir, **kwargs)
             except Exception as e:
                 raise RuntimeError("Unable to connect websocket %s:%d: %s" % (host, port, e))
             if (host == "localhost"):
@@ -96,8 +98,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
                 raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s:%d/firefly/lsst-api-triview.html;wsch=%s: %s" %
-                                   (host, port, name, e))
+                                   "to %s:%d/%s/;wsch=%s: %s" %
+                                   (host, port, basedir, name, e))
 
         self._isBuffered = False
         self._regions = []
@@ -121,30 +123,33 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
+                fd.seek(0,0)
+                self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
-                self._fireflyFitsID = _fireflyClient.upload_file(fd.name)
-                ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
-                                               Title=title, MultiImageIdx=0)
+            ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
+                                           Title=title, MultiImageIdx=0)
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
 
         if mask:
             with tempfile.NamedTemporaryFile() as fdm:
-                displayLib.writeFitsImage(fdm.name, mask, wcs)
+                displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
+                fdm.seek(0,0)
+                self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
 
-                self._fireflyMaskOnServer = _fireflyClient.upload_file(fdm.name)
-                self._maskDict = mask.getMaskPlaneDict()
-                usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
-                for k in self._maskDict:
-                    if ((1 << self._maskDict[k]) & usedPlanes):
-                        _fireflyClient.add_mask(bit_number=self._maskDict[k],
-                                                image_number=0,
-                                                plot_id=str(self.display.frame),
-                                                mask_id=k,
-                                                color=self.display.getMaskPlaneColor(k),
-                                                file_on_server=self._fireflyMaskOnServer)
-                        self._maskIds.append(k)
+            self._maskDict = mask.getMaskPlaneDict()
+            usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
+            for k in self._maskDict:
+                if ((1 << self._maskDict[k]) & usedPlanes):
+                    _fireflyClient.add_mask(bit_number=self._maskDict[k],
+                                            image_number=0,
+                                            plot_id=str(self.display.frame),
+                                            mask_id=k,
+                                            title=k + ' - bit %d'%self._maskDict[k],
+                                            color=self.display.getMaskPlaneColor(k),
+                                            file_on_server=self._fireflyMaskOnServer)
+                    self._maskIds.append(k)
 
     def _remove_masks(self):
         """Remove mask layers"""
@@ -213,7 +218,6 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if self._regionLayerId:
             _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
             self._regionLayerId = None
-        self._remove_masks()
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
@@ -225,8 +229,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                     pass
             except Exception as e:
                 raise RuntimeError("Cannot set callback. Browser must be (re)opened " +
-                                   "to http://%s:%d/firefly/lsst-api-triview.html;wsch=%s : %s" %
-                                   (_fireflyClient.host, _fireflyClient.port,
+                                   "to %s%s : %s" %
+                                   (_fireflyClient.url_bw,
                                     _fireflyClient.channel, e))
 
     def _getEvent(self):
@@ -338,7 +342,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        _fireflyClient.launch_browser(force=True)
+        _fireflyClient.launch_browser()
     #
     # Zoom and Pan
     #
