@@ -1,0 +1,5 @@
+Sphinx>=1.4.5
+astropy-helpers>=1.2
+documenteer>=0.1.9
+-e git://github.com/lsst-sqre/lsst-sphinx-bootstrap-theme.git@tickets/DM-7094#egg=lsst-sphinx-bootstrap-theme
+ltd-mason==0.2.1
