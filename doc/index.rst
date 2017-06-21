@@ -1,12 +1,14 @@
 .. currentmodule:: lsst.display.firefly
 
+.. default-domain:: py
+
 .. _display_firefly:
 
 ########################################################
 lsst.display.firefly — visualization backend for Firefly
 ########################################################
 
-`lsst.display.firefly` is a backend for the lsst.afw.display interface, allowing
+`lsst.display.firefly` is a backend for the `lsst.afw.display` interface, allowing
 the Firefly visualization framework to be used for displaying data objects
 from the stack.
 
@@ -15,37 +17,93 @@ from the stack.
 Introduction
 ============
 
+Firefly is a web framework for astronomical data access and visualization,
+developed at Caltech/IPAC and deployed for the archives of several major
+facilities including Spitzer, WISE, Plank and others. Firefly is a part
+of the LSST Science User Platform. Its client-server architecture is designed
+to enable a user to easily visualize images and catalog data from a remote
+site.
+
+The `lsst.display.firefly` backend is a client that can connect to a Firefly
+server and visualize data objects from an LSST stack session. It is best
+used with a Python session and Firefly server that are both remote and
+situated close to the data.
+
+A user typically will not import `lsst.display.firefly` directly. Instead,
+the `lsst.afw.display` interface will commonly be used with `backend=firefly`.
+
 .. _lsst-display-firefly-getting-started
 
 Getting Started
 ===============
 
-This short example uses data that has been run through the `LSST stack demo` _.
+This short example uses data that has been run through the
+`LSST stack demo <https://pipelines.lsst.io/install/demo.html>`_.
 
-.. _LSST stack demo: https://pipelines.lsst.io/install/demo.html
 
 At a shell prompt:
 
 .. code-block:: shell
-   :name: shell-setup
+   :name: gs-shell-setup
 
    setup obs_sdss
    setup display_firefly
 
 
-Start a Python session of some kind.
+Start a Python session of some kind in the directory where the demo was run.
+Then these statements will create a Butler instance for the output data
+and then retrieve an exposure.
 
-.. code-block
+.. code-block:: py
+   :name: gs-butler-get
 
-.. _lsst-display-firefly-tutorials
+   from lsst.daf.persistence import Butler
+   butler = Butler('./output')
+   calexp = butler.get('calexp', run=4192, camcol=4, field=300, filter='g')
 
-Tutorials
-=========
+The next lines will set up the display, using a public Firefly server at IPAC.
+
+.. code-block:: py
+   :name: gs-setup-display
+
+   import lsst.afw.display as afw_display
+   display1 = afw_display.Display(frame=1, backend='firefly',
+      host='irsa.ipac.caltech.edu', port=80, basedir='irsaviewer',
+      channel='mychannel')
+
+Open a browser window to
+`http://irsa.ipac.caltech.edu/irsaviewer/;wsch=mychannel <http://irsa.ipac.caltech.edu/irsaviewer/;wsch=mychannel>`_.
+Then display the exposure:
+
+.. code-block:: py
+   :name: gs-display-calexp
+
+   display1.mtv(calexp)
+
+The displayed exposure will appear in your browser.
 
 .. _lsst-display-firefly-using
 
 Using lsst.display.firefly
 ==========================
+
+The `lsst.display.firefly` package is not used directly. Instead, instances
+of `lsst.afw.display` are created with parameters passed to the backend.
+The Firefly backend is based upon the Python API in
+:class:`firefly_client.FireflyClient`.
+
+Setup
+-----
+
+Before a Python session or Jupyter notebook is started, setup of stack
+packages must be completed. Use :command:`setup display_firefly` to enable
+the Firefly backend.
+
+Initializing with lsst.afw.display
+----------------------------------
+
+
+
 
 .. _lsst-display-firefly-installing
 
@@ -60,7 +118,7 @@ packages, this section outlines several installation scenarios.
 Installing with eups distrib install
 ------------------------------------
 
-To check for published distributions of `display_firefly`:
+To check for published distributions of `display_firefly`, use
 
 .. code-block:: shell
     :name: eups-distrib-list
@@ -72,6 +130,7 @@ the third item displayed as the EUPS version. Provide that version to
 `eups distrib install display_firefly`, e.g.:
 
 .. code-block:: shell
+    :name: eups-distrib-install
 
     eups distrib install display_firefly master-g05bec400a4
 
@@ -83,37 +142,129 @@ using. This will be fixed when `display_firefly` is included in the
 Developer installation from source code
 ---------------------------------------
 
-Using lsstsw
-^^^^^^^^^^^^
+Install using lsstsw
+^^^^^^^^^^^^^^^^^^^^
 
-If using `lsstsw` to develop with the stack, simply rebuild the package:
-
-.. code-block:: shell
-
-   rebuild display_firefly
-
-Note the build number that is output by the rebuild process, then:
+If using `lsstsw` to develop with the stack, rebuild the package:
 
 .. code-block:: shell
+    :name: rebuild-firefly
+
+    rebuild display_firefly
+
+Note the build number NNNN that is output by the rebuild process, then:
+
+.. code-block:: shell
+    :name: tag-clone
 
     eups tags --clone bNNNN current
 
+Install using Github and eups
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Set up the stack with `lsst_distrib` or an obs package such as `obs_sdss` -- just
+use something that already contains `lsst.afw`.
+
+Clone and install `display_firefly`:
+
+.. code-block:: shell
+    :name: git-display-ff
+
+    git clone https://github.com/lsst/display_firefly
+    cd display_firefly
+    setup -j -r . -t $USER
+    scons -Q -j 6 opt=3
+
+Clone and install `firefly_client`:
+
+.. code-block:: shell
+    :name: git-ffclient
+
+    git clone https://github.com/lsst/firefly_client
+    cd firefly_client
+    git checkout lsst-dev
+    rm -r _eupspkg
+    eupspkg -e -v 1 fetch
+    eupspkg -e -v 1 prep
+    eupspkg -e -v 1 config
+    eupspkg -e -v 1 build
+    eupspkg -e -v 1 install
+    setup -r _eupspkg/binary/firefly_client/lsst-dev
+
+Clone and install `ws4py`:
+
+.. code-block:: shell
+    :name: git-ws4py
+
+    git clone https://github.com/lsst/ws4py
+    cd ws4py
+    rm -r _eupspkg
+    eupspkg -e -v 1 fetch
+    eupspkg -e -v 1 prep
+    eupspkg -e -v 1 config
+    eupspkg -e -v 1 build
+    eupspkg -e -v 1 install
+    setup -r _eupspkg/binary/ws4py/master
 
 .. _lsst-display-firefly-servers
 
 Firefly Servers
 ===============
 
+Ideally, a Firefly server sitting close to your data and your Python workspace
+will have been provided to you. In some cases you may want to run your own
+Firefly server.
+
+Firefly server using Docker
+---------------------------
+
+With Docker installed, you can start a Firefly server with 8 GB of memory on
+port 8080:
+
+.. code-block:: shell
+
+    docker run -p 8080:8080 -e "MAX_JVM_SIZE=8G" --rm ipac/firefly
+
+To run it on port 8090, in the background and saving logging information
+to a file:
+
+.. code-block:: shell
+
+    docker run -p 8090:8080  -e "MAX_JVM_SIZE=8G" --rm ipac/firefly >& my.log &
+
+Here are some useful Docker commands:
+
+- List containers that are running: :command:`docker ps`
+
+- Stop the server: :command:`docker container stop firefly`
+
+- Start a shell inside the docker image: :command:`docker exec -it firefly /bin/bash`
+
+Standalone Firefly using Java
+-----------------------------
+
+A Firefly server may be run from a single file using Java 8.
+
+- Point your web browser to the Firefly release page at
+  `https://github.com/Caltech-IPAC/firefly/releases <https://github.com/Caltech-IPAC/firefly/releases>`_
+
+- Download the latest ``firefly-exec.war``
+
+- Start Firefly with :command:`java -jar firefly-exec.war`
+
+   - Use option ``-httpPort 9080`` to run on port 9080 instead of the
+     default 8080
+   - Use option ``-extractDirectory <dirname>`` to extract the contents to a
+     different directory instead of the default ``./extract``
+   - On Mac OS X, it may be necessary to add the option
+     ``-Djava.net.preferIPv4Stack=true``. If using this server locally, you
+     may need to use host ``127.0.0.1`` instead of ``localhost``
+
+
+
 .. _lsst-display-firefly-py-ref
 
 Python API reference
 ====================
 
-.. automodapi:: lsst.display.firefly
 
-.. automodapi:: lsst.afw.display
-:no-inheritance-diagram:
-
-.. _Firefly: https://firefly.lsst.codes
-
-.. _firefly_client: https://firefly_client.lsst.codes
