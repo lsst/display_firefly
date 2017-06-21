@@ -102,7 +102,101 @@ the Firefly backend.
 Initializing with lsst.afw.display
 ----------------------------------
 
+The recommended way to create a display object for Firefly is using
+the :class:`Display` constructor from `lsst.afw.display`:
 
+.. code-block:: py
+    :name: construct-display
+
+    import lsst.afw.display as afw_display
+    display1 = afw_display.Display(frame=1, host='localhost', port=8080,
+                                   basedir='firefly', channel='afw')
+
+The parameters shown above (besides ``frame``) are the defaults and will
+apply when running a Firefly server locally with default settings.
+
+If a Firefly server has been provided to you, set ``host``, ``port``, and
+``basedir`` according to the informatio provided. You should set ``channel``
+to a unique string to avoid another user from writing to your display.
+
+:warn: Once a :class:`Display` instance is made, within your Python session
+it will not be possible to define another display pointing to a different
+server.
+
+Opening a browser window
+------------------------
+
+A browser window or tab must be opened before any data are displayed.
+
+When using a Firefly server on ``localhost``, creating the display object
+will cause a browser window to open to the correct location. For this
+example, the ``display1.show()`` method is run.
+
+When using a server with a different host name, you will likely have to
+open a browser window or tab on your local machine yourself. For example,
+for ``host=lsst-dev``, ``port=8085``, ``basedir=firefly``, ``channel=mine``,
+use the url ``http://lsst-dev:8085/firefly/;wsch=mine``.
+
+
+Displaying an image
+-------------------
+
+The :meth:`mtv` method of your display is used to display Exposures,
+MaskedImages and Images from the stack. Assuming that your session
+includes an Exposure named ``calexp``:
+
+.. code-block:: py
+    :name: display-mtv
+
+    display1.mtv(calexp)
+
+Mask display and manipulation
+-----------------------------
+
+If the data object passed to :meth:`mtv` contains masks, these will
+automatically be overlaid on the image. A layer control icon at the
+top of the browser window can be used to turn mask layers on and off.
+
+The :meth:`display1.setMaskPlaneColor` and
+:meth:`display1.setMaskTransparency` methods can be used to programmatically
+change the mask display. :meth:`display1.setMaskPlaneColor` must be used before
+the image is displayed, while the transparency may be changed at any time.
+
+.. code-block:: py
+    :name: mask-manipulation
+
+    display1.setMaskPlaneColor('DETECTED', afw_display.GREEN)
+    display1.mtv(calexp)
+    display1.setMaskTransparency(30)
+
+Image scale, zoom, pan
+----------------------
+
+The ``display1`` object includes methods for setting the image scale or
+stretch, the zoom and the pan position.
+
+.. code-block:: py
+    :name: scale-zoom-pan
+
+    display1.scale('log', -1, 10, 'sigma')
+    display1.zoom(4)
+    display1.pan(1064, 890)
+
+Overlaying symbols
+------------------
+
+The :meth:`display1.dot` method will overlay a symbol at a point.
+
+.. code-block:: py
+    :name: ff-dot
+
+    display1.dot('x', 1064, 890, size=8, ctype=afw_display.RED)
+
+interact() method not implemented
+---------------------------------
+
+The :meth:`display1.interact()` method is not implemented, due mainly to
+limitations of a browser window recognizing a keypress event.
 
 
 .. _lsst-display-firefly-installing
@@ -266,5 +360,3 @@ A Firefly server may be run from a single file using Java 8.
 
 Python API reference
 ====================
-
-
