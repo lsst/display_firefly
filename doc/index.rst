@@ -12,7 +12,7 @@ lsst.display.firefly — visualization backend for Firefly
 the Firefly visualization framework to be used for displaying data objects
 from the stack.
 
-.. _lsst-display_firefly-intro
+.. _lsst-display_firefly-intro:
 
 Introduction
 ============
@@ -32,7 +32,7 @@ situated close to the data.
 A user typically will not import `lsst.display.firefly` directly. Instead,
 the `lsst.afw.display` interface will commonly be used with `backend=firefly`.
 
-.. _lsst-display-firefly-getting-started
+.. _lsst-display-firefly-getting-started:
 
 Getting Started
 ===============
@@ -82,7 +82,7 @@ Then display the exposure:
 
 The displayed exposure will appear in your browser.
 
-.. _lsst-display-firefly-using
+.. _lsst-display-firefly-using:
 
 Using lsst.display.firefly
 ==========================
@@ -119,9 +119,11 @@ If a Firefly server has been provided to you, set ``host``, ``port``, and
 ``basedir`` according to the informatio provided. You should set ``channel``
 to a unique string to avoid another user from writing to your display.
 
-:warn: Once a :class:`Display` instance is made, within your Python session
-it will not be possible to define another display pointing to a different
-server.
+.. warning::
+
+   Once a :class:`Display` instance is made, within your Python session
+   it will not be possible to define another display pointing to a different
+   server.
 
 Opening a browser window
 ------------------------
@@ -199,7 +201,7 @@ The :meth:`display1.interact()` method is not implemented, due mainly to
 limitations of a browser window recognizing a keypress event.
 
 
-.. _lsst-display-firefly-installing
+.. _lsst-display-firefly-installing:
 
 Installing lsst.display.firefly
 ===============================
@@ -207,7 +209,7 @@ Installing lsst.display.firefly
 Since `display_firefly` is not yet included in the `lsst_distrib` set of stack
 packages, this section outlines several installation scenarios.
 
-.. _lsst-display_firefly-eups-distrib-install
+.. _lsst-display_firefly-eups-distrib-install:
 
 Installing with eups distrib install
 ------------------------------------
@@ -300,7 +302,7 @@ Clone and install `ws4py`:
     eupspkg -e -v 1 install
     setup -r _eupspkg/binary/ws4py/master
 
-.. _lsst-display-firefly-servers
+.. _lsst-display-firefly-servers:
 
 Firefly Servers
 ===============
@@ -356,7 +358,9 @@ A Firefly server may be run from a single file using Java 8.
 
 
 
-.. _lsst-display-firefly-py-ref
+.. .. _lsst-display-firefly-py-ref:
 
-Python API reference
-====================
+.. Python API reference
+.. ====================
+
+.. .. automodapi:: lsst.display.firefly
