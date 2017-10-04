@@ -30,6 +30,7 @@ import unittest
 
 import lsst.utils.tests
 import lsst.display.firefly
+import lsst.afw.display as afw_display
 import ws4py
 
 
@@ -40,6 +41,12 @@ class InvalidHostTestCase1(lsst.utils.tests.TestCase):
         with self.assertRaises(ws4py.websocket.HandshakeError):
             lsst.display.firefly.firefly_client.FireflyClient(
                                     'google.com:80')
+
+    def testMakeDisplay(self):
+        with self.assertRaises(RuntimeError):
+            afw_display.Display(backend='firefly',
+                                host='google.com',
+                                port=80)
 
 
 class MemoryTester(lsst.utils.tests.MemoryTestCase):
