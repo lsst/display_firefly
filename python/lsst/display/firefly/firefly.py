@@ -28,6 +28,7 @@ from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
 import tempfile
+import os
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
@@ -78,8 +79,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="localhost", port=8080,
-                 name="afw", basedir="firefly", *args, **kwargs):
+    def __init__(self, display, verbose=False, host="localhost", port=8080, name="afw",
+                 basedir="firefly", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
@@ -98,7 +99,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
                 raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s:%d/%s/;wsch=%s: %s" %
+                                   "to %s:%d/%s/lsst-api-triview.html;wsch=%s: %s" %
                                    (host, port, basedir, name, e))
 
         self._isBuffered = False
@@ -120,7 +121,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if image:
             self._erase()
 
-            with tempfile.NamedTemporaryFile() as fd:
+            with tempfile.NamedTemporaryFile(suffix='.fits') as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
                 fd.seek(0,0)
@@ -132,7 +133,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 raise RuntimeError("Display of image failed")
 
         if mask:
-            with tempfile.NamedTemporaryFile() as fdm:
+            with tempfile.NamedTemporaryFile(suffix='.fits') as fdm:
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
                 fdm.seek(0,0)
@@ -206,6 +207,19 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     N.b. objects derived from BaseCore include Axes and Quadrupole.
     """
         self._uploadTextData(ds9Regions.dot(symb, c, r, size, ctype, fontFamily, textAngle))
+
+    def _overlayCatalog(self, sourceCat, **kwargs):
+        """ Upload a catalog and overlay on image display """
+        table = sourceCat.asAstropy()
+        table['ra'] = table['coord_ra'].to('deg')
+        table['dec'] = table['coord_dec'].to('deg')
+        with tempfile.NamedTemporaryFile(delete=False,
+                                         suffix='.csv') as fd:
+            table.write(fd.name, format='csv')
+
+        tbl_val = _fireflyClient.upload_file(fd.name)
+        os.remove(fd.name)
+        _fireflyClient.show_table(tbl_val)
 
     def _drawLines(self, points, ctype):
         """Connect the points, a list of (col,row)
