@@ -16,3 +16,4 @@ python/lsst/display/firefly/version.py
 tests/.tests
 ups/*.cfgc
 _build.*
+_eupspkg
