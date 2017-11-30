@@ -51,7 +51,7 @@ At a shell prompt:
 
 
 Start a Python session of some kind in the directory where the demo was run.
-Then these statements will create a Butler instance for the output data
+Then these statements will create a Butler instance for the processed data
 and then retrieve an exposure.
 
 .. code-block:: py
@@ -61,18 +61,19 @@ and then retrieve an exposure.
    butler = Butler('./output')
    calexp = butler.get('calexp', run=4192, camcol=4, field=300, filter='g')
 
-The next lines will set up the display, using a public Firefly server at IPAC.
+The next lines will set up the display, using a public Firefly server.
 
 .. code-block:: py
    :name: gs-setup-display
 
    import lsst.afw.display as afw_display
-   display1 = afw_display.Display(frame=1, backend='firefly',
-      host='irsa.ipac.caltech.edu', port=80, basedir='irsaviewer',
-      channel='mychannel')
+   afw_display.setDefaultBackend('lsst.display.firefly')
+   display1 = afw_display.getDisplay(frame=1,
+      host='lsst-demo.ncsa.illinois.edu', port=80,
+      name='mychannel')
 
 Open a browser window to
-`http://irsa.ipac.caltech.edu/irsaviewer/;wsch=mychannel <http://irsa.ipac.caltech.edu/irsaviewer/;wsch=mychannel>`_.
+`http://lsst-demo.ncsa.illinois.edu/firefly?__wsch=mychannel <http://lsst-demo.ncsa.illinois.edu/firefly?__wsch=mychannel>`_.
 Then display the exposure:
 
 .. code-block:: py
@@ -81,6 +82,13 @@ Then display the exposure:
    display1.mtv(calexp)
 
 The displayed exposure will appear in your browser.
+
+Subsequent displays can be opened more simply:
+
+.. code-block:: py
+   :name: gs-additional-display
+
+   display2 = afw_display.getDisplay(frame=2)
 
 .. _lsst-display-firefly-using:
 
@@ -103,20 +111,21 @@ Initializing with lsst.afw.display
 ----------------------------------
 
 The recommended way to create a display object for Firefly is using
-the :class:`Display` constructor from `lsst.afw.display`:
+the :meth:`getDisplay` method from `lsst.afw.display`:
 
 .. code-block:: py
     :name: construct-display
 
     import lsst.afw.display as afw_display
-    display1 = afw_display.Display(frame=1, host='localhost', port=8080,
-                                   basedir='firefly', channel='afw')
+    afw_display.setDefaultBackend('lsst.display.firefly')
+    display1 = afw_display.getDisplay(frame=1, host='localhost', port=8080,
+                                   basedir='firefly', name='afw')
 
 The parameters shown above (besides ``frame``) are the defaults and will
 apply when running a Firefly server locally with default settings.
 
 If a Firefly server has been provided to you, set ``host``, ``port``, and
-``basedir`` according to the informatio provided. You should set ``channel``
+``basedir`` according to the information provided. You should set ``name``
 to a unique string to avoid another user from writing to your display.
 
 .. warning::
@@ -131,13 +140,15 @@ Opening a browser window
 A browser window or tab must be opened before any data are displayed.
 
 When using a Firefly server on ``localhost``, creating the display object
-will cause a browser window to open to the correct location. For this
-example, the ``display1.show()`` method is run.
+will cause a browser window to open to the correct location. If using
+another server (as in the above example), the ``display1.show()`` method
+opens the browser window, if your Python session is on your local machine.
 
-When using a server with a different host name, you will likely have to
+When running a remote Python session, or one inside a container, you will
+need to
 open a browser window or tab on your local machine yourself. For example,
-for ``host=lsst-dev``, ``port=8085``, ``basedir=firefly``, ``channel=mine``,
-use the url ``http://lsst-dev:8085/firefly/;wsch=mine``.
+for ``host=lsst-dev``, ``port=8085``, ``basedir=firefly``, ``name=mine``,
+use the url ``http://lsst-dev:8085/firefly?__wsch=mine``.
 
 
 Displaying an image
@@ -194,12 +205,6 @@ The :meth:`display1.dot` method will overlay a symbol at a point.
 
     display1.dot('x', 1064, 890, size=8, ctype=afw_display.RED)
 
-interact() method not implemented
----------------------------------
-
-The :meth:`display1.interact()` method is not implemented, due mainly to
-limitations of a browser window recognizing a keypress event.
-
 
 .. _lsst-display-firefly-installing:
 
@@ -228,7 +233,7 @@ the third item displayed as the EUPS version. Provide that version to
 .. code-block:: shell
     :name: eups-distrib-install
 
-    eups distrib install display_firefly master-g05bec400a4
+    eups distrib install display_firefly master-g83bca5e38c+1
 
 The version may not be compatible with the version of the stack you are
 using. This will be fixed when `display_firefly` is included in the
@@ -255,11 +260,10 @@ Note the build number NNNN that is output by the rebuild process, then:
 
     eups tags --clone bNNNN current
 
-Install using Github and eups
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Install using Github and scons
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Set up the stack with `lsst_distrib` or an obs package such as `obs_sdss` -- just
-use something that already contains `lsst.afw`.
+Set up the stack with `lsst_distrib` or an obs package such as `obs_sdss`.
 
 Clone and install `display_firefly`:
 
@@ -269,38 +273,9 @@ Clone and install `display_firefly`:
     git clone https://github.com/lsst/display_firefly
     cd display_firefly
     setup -j -r . -t $USER
-    scons -Q -j 6 opt=3
+    scons
 
-Clone and install `firefly_client`:
-
-.. code-block:: shell
-    :name: git-ffclient
-
-    git clone https://github.com/lsst/firefly_client
-    cd firefly_client
-    git checkout lsst-dev
-    rm -r _eupspkg
-    eupspkg -e -v 1 fetch
-    eupspkg -e -v 1 prep
-    eupspkg -e -v 1 config
-    eupspkg -e -v 1 build
-    eupspkg -e -v 1 install
-    setup -r _eupspkg/binary/firefly_client/lsst-dev
-
-Clone and install `ws4py`:
-
-.. code-block:: shell
-    :name: git-ws4py
-
-    git clone https://github.com/lsst/ws4py
-    cd ws4py
-    rm -r _eupspkg
-    eupspkg -e -v 1 fetch
-    eupspkg -e -v 1 prep
-    eupspkg -e -v 1 config
-    eupspkg -e -v 1 build
-    eupspkg -e -v 1 install
-    setup -r _eupspkg/binary/ws4py/master
+Install the dependency `firefly_client` with `pip install firefly_client`.
 
 .. _lsst-display-firefly-servers:
 
@@ -328,13 +303,7 @@ to a file:
 
     docker run -p 8090:8080  -e "MAX_JVM_SIZE=8G" --rm ipac/firefly >& my.log &
 
-Here are some useful Docker commands:
-
-- List containers that are running: :command:`docker ps`
-
-- Stop the server: :command:`docker container stop firefly`
-
-- Start a shell inside the docker image: :command:`docker exec -it firefly /bin/bash`
+Useful Docker commands may be found `in this cheat sheet <https://github.com/wsargent/docker-cheat-sheet>`_.
 
 Standalone Firefly using Java
 -----------------------------
@@ -364,3 +333,4 @@ A Firefly server may be run from a single file using Java 8.
 .. ====================
 
 .. .. automodapi:: lsst.display.firefly
+..      :no-inheritance-diagram:
