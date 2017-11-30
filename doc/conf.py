@@ -18,3 +18,7 @@ intersphinx_mapping['astropy'] = ('http://docs.astropy.org/en/stable', None)
 
 # DEBUG only
 automodsumm_writereprocessed = False
+
+extensions = [
+    'astropy_helpers.extern.automodapi.automodapi',
+    'astropy_helpers.extern.numpydoc']
