@@ -52,8 +52,8 @@ class FireflyError(Exception):
 
 
 def firefly_version():
-    """Return the version of firefly in use, as a string"""
-    raise NotImplementedError("firefly_version")
+    """Return the version of firefly_client in use, as a string"""
+    return(firefly_client.__version__)
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -78,7 +78,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="localhost", port=8080,
+    def __init__(self, display, verbose=False, host="http://localhost:8080",
                  name="afw", basedir="firefly", *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
@@ -88,18 +88,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                _fireflyClient = firefly_client.FireflyClient("%s:%d" % (host, port),
+                _fireflyClient = firefly_client.FireflyClient("%s" % host,
                                         channel=name, basedir=basedir, **kwargs)
             except Exception as e:
-                raise RuntimeError("Unable to connect websocket %s:%d: %s" % (host, port, e))
-            if (host == "localhost"):
+                raise RuntimeError("Unable to connect websocket %s: %s" % (host, e))
+            if (host[:9] == "localhost"):
                 _fireflyClient.launch_browser()
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
                 raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s:%d/%s/;wsch=%s: %s" %
-                                   (host, port, basedir, name, e))
+                                   "to %s: %s" %
+                                   (_fireflyClient.get_firefly_url(), e))
 
         self._isBuffered = False
         self._regions = []
