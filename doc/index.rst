@@ -69,7 +69,7 @@ The next lines will set up the display, using a public Firefly server.
    import lsst.afw.display as afw_display
    afw_display.setDefaultBackend('lsst.display.firefly')
    display1 = afw_display.getDisplay(frame=1,
-      host='lsst-demo.ncsa.illinois.edu', port=80,
+      host='lsst-demo.ncsa.illinois.edu',
       name='mychannel')
 
 Open a browser window to
@@ -118,13 +118,13 @@ the :meth:`getDisplay` method from `lsst.afw.display`:
 
     import lsst.afw.display as afw_display
     afw_display.setDefaultBackend('lsst.display.firefly')
-    display1 = afw_display.getDisplay(frame=1, host='localhost', port=8080,
+    display1 = afw_display.getDisplay(frame=1, host='http://localhost:8080',
                                    basedir='firefly', name='afw')
 
 The parameters shown above (besides ``frame``) are the defaults and will
 apply when running a Firefly server locally with default settings.
 
-If a Firefly server has been provided to you, set ``host``, ``port``, and
+If a Firefly server has been provided to you, set ``host`` and
 ``basedir`` according to the information provided. You should set ``name``
 to a unique string to avoid another user from writing to your display.
 
@@ -147,7 +147,7 @@ opens the browser window, if your Python session is on your local machine.
 When running a remote Python session, or one inside a container, you will
 need to
 open a browser window or tab on your local machine yourself. For example,
-for ``host=lsst-dev``, ``port=8085``, ``basedir=firefly``, ``name=mine``,
+for ``host=http://lsst-dev:8085``, ``basedir=firefly``, ``name=mine``,
 use the url ``http://lsst-dev:8085/firefly?__wsch=mine``.
 
 
@@ -211,8 +211,10 @@ The :meth:`display1.dot` method will overlay a symbol at a point.
 Installing lsst.display.firefly
 ===============================
 
-Since `display_firefly` is not yet included in the `lsst_distrib` set of stack
-packages, this section outlines several installation scenarios.
+Now that `display_firefly` is included in the `lsst_distrib` set of stack
+packages, normally the `setup lsst_distrib` command will set up this package.
+
+If `lsst_distrib` is not available, this section outlines several installation scenarios.
 
 .. _lsst-display_firefly-eups-distrib-install:
 
