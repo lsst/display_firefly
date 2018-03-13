@@ -69,7 +69,7 @@ The next lines will set up the display, using a public Firefly server.
    import lsst.afw.display as afw_display
    afw_display.setDefaultBackend('lsst.display.firefly')
    display1 = afw_display.getDisplay(frame=1,
-      host='lsst-demo.ncsa.illinois.edu',
+      host='https://lsst-demo.ncsa.illinois.edu',
       name='mychannel')
 
 Open a browser window to
