@@ -69,7 +69,7 @@ The next lines will set up the display, using a public Firefly server.
    import lsst.afw.display as afw_display
    afw_display.setDefaultBackend('lsst.display.firefly')
    display1 = afw_display.getDisplay(frame=1,
-      host='lsst-demo.ncsa.illinois.edu', port=80,
+      host='https://lsst-demo.ncsa.illinois.edu',
       name='mychannel')
 
 Open a browser window to
@@ -118,13 +118,13 @@ the :meth:`getDisplay` method from `lsst.afw.display`:
 
     import lsst.afw.display as afw_display
     afw_display.setDefaultBackend('lsst.display.firefly')
-    display1 = afw_display.getDisplay(frame=1, host='localhost', port=8080,
+    display1 = afw_display.getDisplay(frame=1, host='http://localhost:8080',
                                    basedir='firefly', name='afw')
 
 The parameters shown above (besides ``frame``) are the defaults and will
 apply when running a Firefly server locally with default settings.
 
-If a Firefly server has been provided to you, set ``host``, ``port``, and
+If a Firefly server has been provided to you, set ``host`` and
 ``basedir`` according to the information provided. You should set ``name``
 to a unique string to avoid another user from writing to your display.
 
@@ -147,7 +147,7 @@ opens the browser window, if your Python session is on your local machine.
 When running a remote Python session, or one inside a container, you will
 need to
 open a browser window or tab on your local machine yourself. For example,
-for ``host=lsst-dev``, ``port=8085``, ``basedir=firefly``, ``name=mine``,
+for ``host=http://lsst-dev:8085``, ``basedir=firefly``, ``name=mine``,
 use the url ``http://lsst-dev:8085/firefly?__wsch=mine``.
 
 
@@ -211,71 +211,10 @@ The :meth:`display1.dot` method will overlay a symbol at a point.
 Installing lsst.display.firefly
 ===============================
 
-Since `display_firefly` is not yet included in the `lsst_distrib` set of stack
-packages, this section outlines several installation scenarios.
-
-.. _lsst-display_firefly-eups-distrib-install:
-
-Installing with eups distrib install
-------------------------------------
-
-To check for published distributions of `display_firefly`, use
-
-.. code-block:: shell
-    :name: eups-distrib-list
-
-    eups distrib list display_firefly -s https://sw.lsstcorp.org/eupspkg
-
-This command will return the published versions of `display_firefly`, with
-the third item displayed as the EUPS version. Provide that version to
-`eups distrib install display_firefly`, e.g.:
-
-.. code-block:: shell
-    :name: eups-distrib-install
-
-    eups distrib install display_firefly master-g83bca5e38c+1
-
-The version may not be compatible with the version of the stack you are
-using. This will be fixed when `display_firefly` is included in the
-`lsst_distrib` distribution.
-
-
-Developer installation from source code
----------------------------------------
-
-Install using lsstsw
-^^^^^^^^^^^^^^^^^^^^
-
-If using `lsstsw` to develop with the stack, rebuild the package:
-
-.. code-block:: shell
-    :name: rebuild-firefly
-
-    rebuild display_firefly
-
-Note the build number NNNN that is output by the rebuild process, then:
-
-.. code-block:: shell
-    :name: tag-clone
-
-    eups tags --clone bNNNN current
-
-Install using Github and scons
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Set up the stack with `lsst_distrib` or an obs package such as `obs_sdss`.
-
-Clone and install `display_firefly`:
-
-.. code-block:: shell
-    :name: git-display-ff
-
-    git clone https://github.com/lsst/display_firefly
-    cd display_firefly
-    setup -j -r . -t $USER
-    scons
-
-Install the dependency `firefly_client` with `pip install firefly_client`.
+Now that `display_firefly` is included in the `lsst_distrib` set of stack
+packages, the `setup lsst_distrib` command will set up this package and
+its dependecies. See methods for installing `lsst_distrib` at
+`pipelines.lsst.io <https://pipelines.lsst.io>`_.
 
 .. _lsst-display-firefly-servers:
 
