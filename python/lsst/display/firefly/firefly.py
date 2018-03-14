@@ -28,6 +28,7 @@ from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
 import tempfile
+from urllib.parse import urlparse
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
@@ -88,11 +89,12 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                _fireflyClient = firefly_client.FireflyClient("%s" % host,
+                _fireflyClient = firefly_client.FireflyClient(host,
                                         channel=name, basedir=basedir, **kwargs)
             except Exception as e:
                 raise RuntimeError("Unable to connect websocket %s: %s" % (host, e))
-            if (host[:9] == "localhost"):
+            parsed_host = urlparse(host)
+            if (parsed_host.hostname == "localhost"):
                 _fireflyClient.launch_browser()
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
