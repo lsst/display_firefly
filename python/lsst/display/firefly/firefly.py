@@ -98,6 +98,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
             global localbrowser
             localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
+            if not localbrowser:
+                _fireflyClient.display_url()
             if self.verbose:
                print('localbrowser: ', localbrowser, '   url: ', url)
             try:
@@ -352,7 +354,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        return _fireflyClient.launch_browser(verbose=self.verbose)
+        localbrowser,  url = _fireflyClient.launch_browser(verbose=self.verbose)
+        if not localbrowser:
+            _fireflyClient.display_url()
     #
     # Zoom and Pan
     #
