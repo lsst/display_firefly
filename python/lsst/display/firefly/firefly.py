@@ -78,7 +78,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host=None,
+    def __init__(self, display, verbose=False, url=None,
                  name=None, *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
@@ -88,20 +88,20 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                if host is None:
+                if url is None:
                     _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
                 else:
-                    _fireflyClient = firefly_client.FireflyClient(host,
+                    _fireflyClient = firefly_client.FireflyClient(url,
                                         channel=name, **kwargs)
             except Exception as e:
-                raise RuntimeError("Unable to connect websocket %s: %s" % (host or '', e))
+                raise RuntimeError("Unable to connect websocket %s: %s" % (url or '', e))
 
             global localbrowser
-            localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
+            localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
             if not localbrowser:
                 _fireflyClient.display_url()
             if self.verbose:
-               print('localbrowser: ', localbrowser, '   url: ', url)
+               print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
