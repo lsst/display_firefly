@@ -40,18 +40,19 @@ Getting Started
 This short example uses data that has been run through the
 `LSST stack demo <https://pipelines.lsst.io/install/demo.html>`_.
 
-
-At a shell prompt:
+If running in an LSST Science Platform environment, these setup steps will already
+have been done for you. If not, setup the stack and the default environment
+variables FIREFLY_URL and FIREFLY_HTML.
 
 .. code-block:: shell
    :name: gs-shell-setup
 
-   setup obs_sdss
-   setup display_firefly
-
+   setup lsst_distrib
+   export FIREFLY_URL=https://lsst-demo.ncsa.illinois.edu/firefly
+   export FIREFLY_HTML=slate.html
 
 Start a Python session of some kind in the directory where the demo was run.
-Then these statements will create a Butler instance for the processed data
+These statements will create a Butler instance for the processed data
 and then retrieve an exposure.
 
 .. code-block:: py
@@ -61,19 +62,20 @@ and then retrieve an exposure.
    butler = Butler('./output')
    calexp = butler.get('calexp', run=4192, camcol=4, field=300, filter='g')
 
-The next lines will set up the display, using a public Firefly server.
+The next lines will set up the display, using the Firefly server located at
+the URL in the FIREFLY_URL environment variable.
 
 .. code-block:: py
    :name: gs-setup-display
 
    import lsst.afw.display as afw_display
-   afw_display.setDefaultBackend('lsst.display.firefly')
-   display1 = afw_display.getDisplay(frame=1,
-      host='https://lsst-demo.ncsa.illinois.edu',
-      name='mychannel')
+   afw_display.setDefaultBackend('firefly')
+   display1 = afw_display.getDisplay(frame=1)
 
-Open a browser window to
-`http://lsst-demo.ncsa.illinois.edu/firefly?__wsch=mychannel <http://lsst-demo.ncsa.illinois.edu/firefly?__wsch=mychannel>`_.
+The creation of the display will attempt to open a web browser. If that is unsuccessful,
+a URL will be displayed, as a link if running in a notebook and as text to
+copy/paste if in a terminal.
+
 Then display the exposure:
 
 .. code-block:: py
@@ -83,7 +85,7 @@ Then display the exposure:
 
 The displayed exposure will appear in your browser.
 
-Subsequent displays can be opened more simply:
+Subsequent image displays can be opened:
 
 .. code-block:: py
    :name: gs-additional-display
@@ -105,7 +107,7 @@ Setup
 
 Before a Python session or Jupyter notebook is started, setup of stack
 packages must be completed. Use :command:`setup display_firefly` to enable
-the Firefly backend.
+the Firefly backend. This is not normally needed when using `lsst_distrib`.
 
 Initializing with lsst.afw.display
 ----------------------------------
@@ -117,21 +119,20 @@ the :meth:`getDisplay` method from `lsst.afw.display`:
     :name: construct-display
 
     import lsst.afw.display as afw_display
-    afw_display.setDefaultBackend('lsst.display.firefly')
-    display1 = afw_display.getDisplay(frame=1, host='http://localhost:8080',
-                                   basedir='firefly', name='afw')
+    afw_display.setDefaultBackend('firefly')
+    display1 = afw_display.getDisplay(frame=1, url='http://localhost:8080/firefly')
 
 The parameters shown above (besides ``frame``) are the defaults and will
 apply when running a Firefly server locally with default settings.
 
-If a Firefly server has been provided to you, set ``host`` and
-``basedir`` according to the information provided. You should set ``name``
-to a unique string to avoid another user from writing to your display.
+If a Firefly server has been provided to you, set ``url`` and
+according to the information provided, or set the environment variables FIREFLY_URL
+and FIREFLY_HTML.
 
 .. warning::
 
-   Once a :class:`Display` instance is made, within your Python session
-   it will not be possible to define another display pointing to a different
+   Once a :class:`Display` instance is created, it will not be possible within
+   your Python session to define another display pointing to a different
    server.
 
 Opening a browser window
@@ -142,14 +143,8 @@ A browser window or tab must be opened before any data are displayed.
 When using a Firefly server on ``localhost``, creating the display object
 will cause a browser window to open to the correct location. If using
 another server (as in the above example), the ``display1.show()`` method
-opens the browser window, if your Python session is on your local machine.
-
-When running a remote Python session, or one inside a container, you will
-need to
-open a browser window or tab on your local machine yourself. For example,
-for ``host=http://lsst-dev:8085``, ``basedir=firefly``, ``name=mine``,
-use the url ``http://lsst-dev:8085/firefly?__wsch=mine``.
-
+opens the browser window, if your Python session is on your local machine,
+and displays a URL for your browser if running a remote Python session.
 
 Displaying an image
 -------------------
@@ -205,15 +200,28 @@ The :meth:`display1.dot` method will overlay a symbol at a point.
 
     display1.dot('x', 1064, 890, size=8, ctype=afw_display.RED)
 
+Accessing the underlying FireflyClient instance
+-----------------------------------------------
+
+The underlying instance of `firefly_client.FireflyClient` can be accessed
+as an attribute of a display.
+
+.. code-block:: py
+    :name: client-attribute
+
+    fc = display1._client
+
+See the `firefly_client documentation <https://firefly-client.lsst.io>`_ for
+more information about using `FireflyClient`.
 
 .. _lsst-display-firefly-installing:
 
 Installing lsst.display.firefly
 ===============================
 
-Now that `display_firefly` is included in the `lsst_distrib` set of stack
+Since `display_firefly` is included in the `lsst_distrib` set of stack
 packages, the `setup lsst_distrib` command will set up this package and
-its dependecies. See methods for installing `lsst_distrib` at
+its dependencies. See methods for installing `lsst_distrib` at
 `pipelines.lsst.io <https://pipelines.lsst.io>`_.
 
 .. _lsst-display-firefly-servers:
@@ -221,9 +229,10 @@ its dependecies. See methods for installing `lsst_distrib` at
 Firefly Servers
 ===============
 
-Ideally, a Firefly server sitting close to your data and your Python workspace
-will have been provided to you. In some cases you may want to run your own
-Firefly server.
+In many cases, such as when using an LSST Science Platform environment,
+a Firefly server sitting close to your data and your Python workspace
+will have been provided to you. An alternative supported use case is to
+run a Firefly server on your local machine.
 
 Firefly server using Docker
 ---------------------------
@@ -235,6 +244,8 @@ port 8080:
 
     docker run -p 8080:8080 -e "MAX_JVM_SIZE=8G" --rm ipac/firefly
 
+In this case, the URL for Firefly will be `http://localhost:8080/firefly`.
+
 To run it on port 8090, in the background and saving logging information
 to a file:
 
@@ -243,26 +254,6 @@ to a file:
     docker run -p 8090:8080  -e "MAX_JVM_SIZE=8G" --rm ipac/firefly >& my.log &
 
 Useful Docker commands may be found `in this cheat sheet <https://github.com/wsargent/docker-cheat-sheet>`_.
-
-Standalone Firefly using Java
------------------------------
-
-A Firefly server may be run from a single file using Java 8.
-
-- Point your web browser to the Firefly release page at
-  `https://github.com/Caltech-IPAC/firefly/releases <https://github.com/Caltech-IPAC/firefly/releases>`_
-
-- Download the latest ``firefly-exec.war``
-
-- Start Firefly with :command:`java -jar firefly-exec.war`
-
-   - Use option ``-httpPort 9080`` to run on port 9080 instead of the
-     default 8080
-   - Use option ``-extractDirectory <dirname>`` to extract the contents to a
-     different directory instead of the default ``./extract``
-   - On Mac OS X, it may be necessary to add the option
-     ``-Djava.net.preferIPv4Stack=true``. If using this server locally, you
-     may need to use host ``127.0.0.1`` instead of ``localhost``
 
 
 
