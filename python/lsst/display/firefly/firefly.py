@@ -27,8 +27,8 @@
 from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
+from socket import gaierror
 import tempfile
-from urllib.parse import urlparse
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
@@ -42,7 +42,7 @@ try:
     _fireflyClient = None
 except ImportError as e:
     raise RuntimeError("Cannot import firefly_client: %s" % (e))
-
+from ws4py.client import HandshakeError
 
 class FireflyError(Exception):
 
@@ -79,8 +79,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if data.get('type') == "POINT":
             lsst.log.debug("Event Received: %s" % data.get('id'))
 
-    def __init__(self, display, verbose=False, host="http://localhost:8080",
-                 name="afw", basedir="firefly", *args, **kwargs):
+    def __init__(self, display, verbose=False, url=None,
+                 name=None, *args, **kwargs):
         virtualDevice.DisplayImpl.__init__(self, display, verbose)
 
         if self.verbose:
@@ -89,13 +89,20 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             try:
-                _fireflyClient = firefly_client.FireflyClient(host,
-                                        channel=name, basedir=basedir, **kwargs)
-            except Exception as e:
-                raise RuntimeError("Unable to connect websocket %s: %s" % (host, e))
-            parsed_host = urlparse(host)
-            if (parsed_host.hostname == "localhost"):
-                _fireflyClient.launch_browser()
+                if url is None:
+                    _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
+                else:
+                    _fireflyClient = firefly_client.FireflyClient(url,
+                                                                  channel=name, **kwargs)
+            except (HandshakeError, gaierror) as e:
+                raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
+
+            global localbrowser
+            localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
+            if not localbrowser and not self.verbose:
+                _fireflyClient.display_url()
+            if self.verbose:
+               print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
@@ -108,6 +115,10 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._regionLayerId = None
         self._fireflyFitsID = None
         self._fireflyMaskOnServer = None
+        self._client = _fireflyClient
+        self._channel = _fireflyClient.channel
+        self._url = _fireflyClient.get_firefly_url()
+        self._localbrowser = localbrowser
         self._maskIds = []
         self._maskDict = {}
 
@@ -344,7 +355,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        _fireflyClient.launch_browser()
+        localbrowser,  url = _fireflyClient.launch_browser(verbose=self.verbose)
+        if not localbrowser and not self.verbose:
+            _fireflyClient.display_url()
     #
     # Zoom and Pan
     #
