@@ -27,6 +27,7 @@
 from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
+from socket import gaierror
 import tempfile
 
 import lsst.afw.display.interface as interface
@@ -41,7 +42,7 @@ try:
     _fireflyClient = None
 except ImportError as e:
     raise RuntimeError("Cannot import firefly_client: %s" % (e))
-
+from ws4py.client import HandshakeError
 
 class FireflyError(Exception):
 
@@ -92,13 +93,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                     _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
                 else:
                     _fireflyClient = firefly_client.FireflyClient(url,
-                                        channel=name, **kwargs)
-            except Exception as e:
-                raise RuntimeError("Unable to connect websocket %s: %s" % (url or '', e))
+                                                                  channel=name, **kwargs)
+            except (HandshakeError, gaierror) as e:
+                raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
 
             global localbrowser
             localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
-            if not localbrowser:
+            if not localbrowser and not self.verbose:
                 _fireflyClient.display_url()
             if self.verbose:
                print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
@@ -355,7 +356,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _show(self):
         """Show the requested window"""
         localbrowser,  url = _fireflyClient.launch_browser(verbose=self.verbose)
-        if not localbrowser:
+        if not localbrowser and not self.verbose:
             _fireflyClient.display_url()
     #
     # Zoom and Pan
