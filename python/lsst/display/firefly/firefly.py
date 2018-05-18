@@ -200,8 +200,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """Called when the device is closed"""
         if self.verbose:
             print("Closing firefly device %s" % (self.display.frame if self.display else "[None]"))
-        _fireflyClient.disconnect()
-        _fireflyClient.session.close()
+        if _fireflyClient is not None:
+            _fireflyClient.disconnect()
+            _fireflyClient.session.close()
 
     def _dot(self, symb, c, r, size, ctype, fontFamily="helvetica", textAngle=None):
         """Draw a symbol onto the specified DS9 frame at (col,row) = (c,r) [0-based coordinates]
