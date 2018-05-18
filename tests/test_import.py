@@ -40,13 +40,12 @@ class InvalidHostTestCase1(lsst.utils.tests.TestCase):
     def testConnect(self):
         with self.assertRaises(ws4py.websocket.HandshakeError):
             lsst.display.firefly.firefly_client.FireflyClient(
-                                    'google.com:80')
+                                    'http://google.com')
 
     def testMakeDisplay(self):
         with self.assertRaises(RuntimeError):
             afw_display.Display(backend='firefly',
-                                host='google.com',
-                                port=80)
+                                url='http://google.com')
 
 
 class MemoryTester(lsst.utils.tests.MemoryTestCase):
