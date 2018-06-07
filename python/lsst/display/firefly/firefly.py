@@ -39,7 +39,6 @@ import lsst.log
 
 try:
     import firefly_client
-    _fireflyClient = None
 except ImportError as e:
     raise RuntimeError("Cannot import firefly_client: %s" % (e))
 from ws4py.client import HandshakeError
@@ -70,8 +69,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
                 plot_id = 3
-                global _fireflyClient
-                _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
+                self._client.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
         lsst.log.debug("Callback event info: {}".format(event))
         return
@@ -86,29 +84,26 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if self.verbose:
             print("Opening firefly device %s" % (self.display.frame if self.display else "[None]"))
 
-        global _fireflyClient
-        if not _fireflyClient:
-            try:
-                if url is None:
-                    _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
-                else:
-                    _fireflyClient = firefly_client.FireflyClient(url,
-                                                                  channel=name, **kwargs)
-            except (HandshakeError, gaierror) as e:
-                raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
+        try:
+            if url is None:
+                _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
+            else:
+                _fireflyClient = firefly_client.FireflyClient(url,
+                                                              channel=name, **kwargs)
+        except (HandshakeError, gaierror) as e:
+            raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
 
-            global localbrowser
-            localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
-            if not localbrowser and not self.verbose:
-                _fireflyClient.display_url()
-            if self.verbose:
-               print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
-            try:
-                _fireflyClient.add_listener(self.__handleCallbacks)
-            except Exception as e:
-                raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s: %s" %
-                                   (_fireflyClient.get_firefly_url(), e))
+        localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
+        if not localbrowser and not self.verbose:
+            _fireflyClient.display_url()
+        if self.verbose:
+           print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
+        try:
+            _fireflyClient.add_listener(self.__handleCallbacks)
+        except Exception as e:
+            raise RuntimeError("Cannot add listener. Browser must be connected" +
+                               "to %s: %s" %
+                               (_fireflyClient.get_firefly_url(), e))
 
         self._isBuffered = False
         self._regions = []
@@ -137,9 +132,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
                 fd.seek(0,0)
-                self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
+                self._fireflyFitsID = self._client.upload_data(fd, 'FITS')
 
-            ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
+            ret = self._client.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
                                            Title=title, MultiImageIdx=0)
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
@@ -149,13 +144,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
                 fdm.seek(0,0)
-                self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
+                self._fireflyMaskOnServer = self._client.upload_data(fdm, 'FITS')
 
             self._maskDict = mask.getMaskPlaneDict()
             usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
             for k in self._maskDict:
                 if ((1 << self._maskDict[k]) & usedPlanes):
-                    _fireflyClient.add_mask(bit_number=self._maskDict[k],
+                    self._client.add_mask(bit_number=self._maskDict[k],
                                             image_number=0,
                                             plot_id=str(self.display.frame),
                                             mask_id=k,
@@ -167,7 +162,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _remove_masks(self):
         """Remove mask layers"""
         for k in self._maskIds:
-            _fireflyClient.remove_mask(plot_id=str(self.display.frame), mask_id=k)
+            self._client.remove_mask(plot_id=str(self.display.frame), mask_id=k)
         self._maskIds = []
 
     def _buffer(self, enable=True):
@@ -186,7 +181,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             print("Flushing %d regions" % len(self._regions))
 
         self._regionLayerId = self._getRegionLayerId()
-        _fireflyClient.add_region_data(region_data=self._regions, plot_id=str(self.display.frame),
+        self._client.add_region_data(region_data=self._regions, plot_id=str(self.display.frame),
                                        region_layer_id=self._regionLayerId)
         self._regions = []
 
@@ -200,9 +195,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """Called when the device is closed"""
         if self.verbose:
             print("Closing firefly device %s" % (self.display.frame if self.display else "[None]"))
-        if _fireflyClient is not None:
-            _fireflyClient.disconnect()
-            _fireflyClient.session.close()
+        if self._client is not None:
+            self._client.disconnect()
+            self._client.session.close()
 
     def _dot(self, symb, c, r, size, ctype, fontFamily="helvetica", textAngle=None):
         """Draw a symbol onto the specified DS9 frame at (col,row) = (c,r) [0-based coordinates]
@@ -230,13 +225,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _erase(self):
         """Erase all overlays on the image"""
         if self._regionLayerId:
-            _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
-            self._regionLayerId = None
+           self._client.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
+        self._regionLayerId = None
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
             try:
-                status = _fireflyClient.add_extension('POINT' if False else 'AREA_SELECT', title=what,
+                status =self._client.add_extension('POINT' if False else 'AREA_SELECT', title=what,
                                                       plot_id=str(self.display.frame),
                                                       extension_id=what)
                 if not status['success']:
@@ -244,8 +239,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             except Exception as e:
                 raise RuntimeError("Cannot set callback. Browser must be (re)opened " +
                                    "to %s%s : %s" %
-                                   (_fireflyClient.url_bw,
-                                    _fireflyClient.channel, e))
+                                   (self._client.url_bw,
+                                    self._client.channel, e))
 
     def _getEvent(self):
         """Return an event generated by a keypress or mouse click
@@ -309,7 +304,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             raise FireflyError('Interval method %s is invalid' % interval_type)
 
         if interval_type is not 'zscale':
-            _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
+            self._client.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
                                        lower_value=min, upper_value=max)
         else:
             if 'zscale_constrast' not in kwargs:
@@ -318,7 +313,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 kwargs['zscale_samples'] = 600
             if 'zscale_samples_perline' not in kwargs:
                 kwargs['zscale_samples_perline'] = 120
-            _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
+            self._client.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
                                        zscale_contrast=kwargs['zscale_contrast'],
                                        zscale_samples=kwargs['zscale_samples'],
                                        zscale_samples_perline=kwargs['zscale_samples_perline'])
@@ -330,7 +325,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         else:
             masklist = self._maskIds
         for k in masklist:
-            _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
+            self._client.dispatch_remote_action(channel=self._client.channel,
                                                   action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
                                                   payload={'plotId': str(self.display.frame),
                                                            'imageOverlayId': k,
@@ -344,10 +339,10 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _setMaskPlaneColor(self, maskplane, color):
         """Specify mask color """
-        _fireflyClient.remove_mask(plot_id=str(self.display.frame),
+        self._client.remove_mask(plot_id=str(self.display.frame),
                                    mask_id=maskplane)
         if (color != 'ignore'):
-            _fireflyClient.add_mask(bit_number=self._maskDict[maskplane],
+            self._client.add_mask(bit_number=self._maskDict[maskplane],
                                     image_number=1,
                                     plot_id=str(self.display.frame),
                                     mask_id=maskplane,
@@ -356,9 +351,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        localbrowser,  url = _fireflyClient.launch_browser(verbose=self.verbose)
+        localbrowser,  url = self._client.launch_browser(verbose=self.verbose)
         if not localbrowser and not self.verbose:
-            _fireflyClient.display_url()
+            self._client.display_url()
     #
     # Zoom and Pan
     #
@@ -366,7 +361,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _zoom(self, zoomfac):
         """Zoom frame by specified amount"""
 
-        _fireflyClient.set_zoom(plot_id=str(self.display.frame), factor=zoomfac)
+        self._client.set_zoom(plot_id=str(self.display.frame), factor=zoomfac)
 
     def _pan(self, colc, rowc):
-        _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
+        self._client.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
