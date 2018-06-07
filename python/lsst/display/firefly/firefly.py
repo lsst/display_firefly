@@ -125,6 +125,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _getRegionLayerId(self):
         return "lsstRegions%s" % self.display.frame if self.display else "None"
 
+    def _clear_image(self):
+        """Delete the current image in the Firefly viewer
+        """
+        self._client.dispatch_remote_action(channel=self._client.channel,
+                                            action_type='ImagePlotCntlr.deletePlotView',
+                                            payload=dict(plotId=str(self.display.frame)))
+
     def _mtv(self, image, mask=None, wcs=None, title=""):
         """Display an Image and/or Mask on a Firefly display
         """
@@ -132,6 +139,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             title = str(self.display.frame)
         if image:
             self._erase()
+            self._clear_image()
 
             with tempfile.NamedTemporaryFile() as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
