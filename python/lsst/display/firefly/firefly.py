@@ -121,6 +121,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._localbrowser = localbrowser
         self._maskIds = []
         self._maskDict = {}
+        self._lastZoom = None
+        self._lastPan = None
 
     def _getRegionLayerId(self):
         return "lsstRegions%s" % self.display.frame if self.display else "None"
@@ -146,11 +148,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 fd.seek(0,0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
+            extraParams = dict(Title=title,
+                               MultiImageIdx=0,
+                               PredefinedOvelayIds=' ')
+                        # Firefly's Javascript API requires a space for parameters;
+                        # otherwise the parameter will be ignored
+
+            if self._lastZoom:
+                extraParams['InitZoomLevel'] = self._lastZoom
+                extraParams['ZoomType'] = 'LEVEL'
+
             ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
-                                           Title=title, MultiImageIdx=0,
-                                           PredefinedOverlayIds=' ')
-            # Firefly's Javascript API requires a space for parameters; otherwise
-            # the parameter will be ignored
+                                           **extraParams)
 
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
@@ -375,9 +384,23 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     #
 
     def _zoom(self, zoomfac):
-        """Zoom frame by specified amount"""
+        """Zoom display by specified amount
 
+        Parameters:
+        -----------
+        zoomfac: `float`
+            zoom level in screen pixels per image pixel
+        """
+        self._lastZoom = zoomfac
         _fireflyClient.set_zoom(plot_id=str(self.display.frame), factor=zoomfac)
 
     def _pan(self, colc, rowc):
+        """Pan to specified pixel coordinates
+
+        Parameters:
+        -----------
+        colc, rowc : `float`
+            column and row in units of pixels
+        """
+        self._lastPan = [colc, rowc] # saved for future use in _mtv
         _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
