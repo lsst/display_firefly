@@ -125,6 +125,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _getRegionLayerId(self):
         return "lsstRegions%s" % self.display.frame if self.display else "None"
 
+    def _clearImage(self):
+        """Delete the current image in the Firefly viewer
+        """
+        self._client.dispatch_remote_action(channel=self._client.channel,
+                                            action_type='ImagePlotCntlr.deletePlotView',
+                                            payload=dict(plotId=str(self.display.frame)))
+
     def _mtv(self, image, mask=None, wcs=None, title=""):
         """Display an Image and/or Mask on a Firefly display
         """
@@ -140,7 +147,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
             ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
-                                           Title=title, MultiImageIdx=0)
+                                           Title=title, MultiImageIdx=0,
+                                           PredefinedOverlayIds=' ')
+            # Firefly's Javascript API requires a space for parameters; otherwise
+            # the parameter will be ignored
+
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
 
