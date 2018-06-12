@@ -112,7 +112,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         self._isBuffered = False
         self._regions = []
-        self._regionLayerId = None
+        self._regionLayerId = self._getRegionLayerId()
         self._fireflyFitsID = None
         self._fireflyMaskOnServer = None
         self._client = _fireflyClient
@@ -140,6 +140,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if title == "":
             title = str(self.display.frame)
         if image:
+            if self.verbose:
+                print('displaying image')
             self._erase()
 
             with tempfile.NamedTemporaryFile() as fd:
@@ -165,6 +167,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 raise RuntimeError("Display of image failed")
 
         if mask:
+            if self.verbose:
+                print('displaying mask')
             with tempfile.NamedTemporaryFile() as fdm:
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
@@ -249,9 +253,10 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _erase(self):
         """Erase all overlays on the image"""
+        if self.verbose:
+            print('region layer id is {}'.format(self._regionLayerId))
         if self._regionLayerId:
             _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
-            self._regionLayerId = None
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
