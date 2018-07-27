@@ -303,6 +303,15 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         else:
             algorithm = 'linear'
 
+        # Translate parameters for asinh and powerlaw_gamma stretches
+        if 'Q' in kwargs:
+            kwargs['asinh_q_value'] = kwargs['Q']
+            del kwargs['Q']
+
+        if 'gamma' in kwargs:
+            kwargs['gamma_value'] = kwargs['gamma']
+            del kwargs['gamma']
+
         if min == 'minmax':
             interval_type = 'percent'
             unit = 'percent'
@@ -335,7 +344,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         if interval_type is not 'zscale':
             _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
-                                       lower_value=min, upper_value=max)
+                                       lower_value=min, upper_value=max, **kwargs)
         else:
             if 'zscale_constrast' not in kwargs:
                 kwargs['zscale_contrast'] = 25
@@ -344,9 +353,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if 'zscale_samples_perline' not in kwargs:
                 kwargs['zscale_samples_perline'] = 120
             _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
-                                       zscale_contrast=kwargs['zscale_contrast'],
-                                       zscale_samples=kwargs['zscale_samples'],
-                                       zscale_samples_perline=kwargs['zscale_samples_perline'])
+                                       **kwargs)
 
     def _setMaskTransparency(self, transparency, maskplane):
         """Specify mask transparency (percent); or None to not set it when loading masks"""
