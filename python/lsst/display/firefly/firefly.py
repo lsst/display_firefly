@@ -162,6 +162,12 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if self._lastZoom:
                 extraParams['InitZoomLevel'] = self._lastZoom
                 extraParams['ZoomType'] = 'LEVEL'
+            if self._lastPan:
+                extraParams['InitialCenterPosition'] = '{0:.3f};{1:.3f};PIXEL'.format(
+                                                        self._lastPan[0],
+                                                        self._lastPan[1])
+            if self._lastStretch:
+                extraParams['RangeValues'] = self._lastStretch
 
             ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
                                            **extraParams)
@@ -211,6 +217,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         if self.verbose:
             print("Flushing %d regions" % len(self._regions))
+            print(self._regions)
 
         self._regionLayerId = self._getRegionLayerId()
         _fireflyClient.add_region_data(region_data=self._regions, plot_id=str(self.display.frame),
@@ -415,7 +422,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         Parameters:
         -----------
         colc, rowc : `float`
-            column and row in units of pixels
+            column and row in units of pixels (zero-based convention,
+              with the xy0 already subtracted off)
         """
-        self._lastPan = [colc, rowc] # saved for future use in _mtv
+        self._lastPan = [colc+0.5, rowc+0.5] # saved for future use in _mtv
+        # Firefly's internal convention is first pixel is (0.5, 0.5)
         _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
