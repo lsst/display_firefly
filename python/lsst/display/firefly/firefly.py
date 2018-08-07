@@ -88,6 +88,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         global _fireflyClient
         if not _fireflyClient:
+            import os
+            if ('html_file' not in kwargs) and ('FIREFLY_HTML' not in os.environ):
+                kwargs['html_file'] = 'slate.html'
             try:
                 if url is None:
                     _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
