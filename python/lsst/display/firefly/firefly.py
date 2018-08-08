@@ -88,6 +88,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         global _fireflyClient
         if not _fireflyClient:
+            import os
+            if ('html_file' not in kwargs) and ('FIREFLY_HTML' not in os.environ):
+                kwargs['html_file'] = 'slate.html'
             try:
                 if url is None:
                     _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
@@ -123,6 +126,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._maskDict = {}
         self._lastZoom = None
         self._lastPan = None
+        self._lastStretch = None
 
     def _getRegionLayerId(self):
         return "lsstRegions%s" % self.display.frame if self.display else "None"
@@ -159,6 +163,12 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if self._lastZoom:
                 extraParams['InitZoomLevel'] = self._lastZoom
                 extraParams['ZoomType'] = 'LEVEL'
+            if self._lastPan:
+                extraParams['InitialCenterPosition'] = '{0:.3f};{1:.3f};PIXEL'.format(
+                                                        self._lastPan[0],
+                                                        self._lastPan[1])
+            if self._lastStretch:
+                extraParams['RangeValues'] = self._lastStretch
 
             ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
                                            **extraParams)
@@ -208,6 +218,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         if self.verbose:
             print("Flushing %d regions" % len(self._regions))
+            print(self._regions)
 
         self._regionLayerId = self._getRegionLayerId()
         _fireflyClient.add_region_data(region_data=self._regions, plot_id=str(self.display.frame),
@@ -286,6 +297,37 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     #
 
     def _scale(self, algorithm, min, max, unit=None, *args, **kwargs):
+        """Scale the image stretch and limits
+
+        Parameters:
+        -----------
+        algorithm : `str`
+            stretch algorithm, e.g. 'linear', 'log', 'loglog', 'equal', 'squared',
+            'sqrt', 'asinh', powerlaw_gamma'
+        min : `float` or `str`
+            lower limit, or 'minmax' for full range, or 'zscale'
+        max : `float` or `str`
+            upper limit; overrriden if min is 'minmax' or 'zscale'
+        unit : `str`
+            unit for min and max. 'percent', 'absolute', 'sigma'.
+            if not specified, min and max are presumed to be in 'absolute' units.
+
+        *args, **kwargs : additional position and keyword arguments.
+            The options are shown below:
+
+            **Q** : `float`, optional
+                The asinh softening parameter for asinh stretch.
+                Use Q=0 for linear stretch, increase Q to make brighter features visible.
+                When not specified or None, Q is calculated by Firefly to use full color range.
+            **gamma**
+                The gamma value for power law gamma stretch (default 2.0)
+            **zscale_contrast** : `int`, optional
+                Contrast parameter in percent for zscale algorithm (default 25)
+            **zscale_samples** : `int`, optional
+                Number of samples for zscale algorithm (default 600)
+            **zscale_samples_perline** : `int`, optional
+                Number of samples per line for zscale algorithm (default 120)
+        """
         stretch_algorithms = ('linear', 'log', 'loglog', 'equal', 'squared', 'sqrt',
                               'asinh', 'powerlaw_gamma')
         interval_methods = ('percent', 'maxmin', 'absolute', 'zscale', 'sigma')
@@ -342,18 +384,23 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if interval_type not in interval_methods:
             raise FireflyError('Interval method %s is invalid' % interval_type)
 
+        rval = {}
         if interval_type is not 'zscale':
-            _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
+            rval = _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
                                        lower_value=min, upper_value=max, **kwargs)
         else:
-            if 'zscale_constrast' not in kwargs:
+            if 'zscale_contrast' not in kwargs:
                 kwargs['zscale_contrast'] = 25
             if 'zscale_samples' not in kwargs:
                 kwargs['zscale_samples'] = 600
             if 'zscale_samples_perline' not in kwargs:
                 kwargs['zscale_samples_perline'] = 120
-            _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
+            rval = _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
                                        **kwargs)
+
+        if 'rv_string' in rval:
+            self._lastStretch = rval['rv_string']
+
 
     def _setMaskTransparency(self, transparency, maskplane):
         """Specify mask transparency (percent); or None to not set it when loading masks"""
@@ -412,7 +459,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         Parameters:
         -----------
         colc, rowc : `float`
-            column and row in units of pixels
+            column and row in units of pixels (zero-based convention,
+              with the xy0 already subtracted off)
         """
-        self._lastPan = [colc, rowc] # saved for future use in _mtv
+        self._lastPan = [colc+0.5, rowc+0.5] # saved for future use in _mtv
+        # Firefly's internal convention is first pixel is (0.5, 0.5)
         _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
