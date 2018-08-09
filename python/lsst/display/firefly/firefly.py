@@ -124,6 +124,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._localbrowser = localbrowser
         self._maskIds = []
         self._maskDict = {}
+        self._maskPlaneColors = {}
+        self._maskTransparencies = {}
         self._lastZoom = None
         self._lastPan = None
         self._lastStretch = None
@@ -185,17 +187,25 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 fdm.seek(0,0)
                 self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
 
-            self._maskDict = mask.getMaskPlaneDict()
+            maskPlaneDict = mask.getMaskPlaneDict()
+            for k, v in maskPlaneDict.items():
+                self._maskDict[k] = v
+                self._maskPlaneColors[k] = self.display.getMaskPlaneColor(k)
             usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
             for k in self._maskDict:
-                if ((1 << self._maskDict[k]) & usedPlanes):
+                if (((1 << self._maskDict[k]) & usedPlanes) and
+                    (k in self._maskPlaneColors) and
+                    (self._maskPlaneColors[k] is not None) and
+                    (self._maskPlaneColors[k].lower() != 'ignore')):
                     _fireflyClient.add_mask(bit_number=self._maskDict[k],
                                             image_number=0,
                                             plot_id=str(self.display.frame),
                                             mask_id=k,
                                             title=k + ' - bit %d'%self._maskDict[k],
-                                            color=self.display.getMaskPlaneColor(k),
+                                            color=self._maskPlaneColors[k],
                                             file_on_server=self._fireflyMaskOnServer)
+                    if k in self._maskTransparencies:
+                        self._setMaskTransparency(self._maskTransparencies[k], k)
                     self._maskIds.append(k)
 
     def _remove_masks(self):
@@ -402,13 +412,14 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             self._lastStretch = rval['rv_string']
 
 
-    def _setMaskTransparency(self, transparency, maskplane):
+    def _setMaskTransparency(self, transparency, maskName):
         """Specify mask transparency (percent); or None to not set it when loading masks"""
-        if maskplane is not None:
-            masklist = [maskplane]
+        if maskName is not None:
+            masklist = [maskName]
         else:
-            masklist = self._maskIds
+            masklist = set(self._maskIds + list(self.display._defaultMaskPlaneColor.keys()))
         for k in masklist:
+            self._maskTransparencies[k] = transparency
             _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
                                                   action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
                                                   payload={'plotId': str(self.display.frame),
@@ -416,21 +427,24 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                                                            'attributes': {'opacity': transparency/100.},
                                                            'doReplot': False})
 
-    def _getMaskTransparency(self, maskplane):
+    def _getMaskTransparency(self, maskName):
         """Return the current mask's transparency"""
+        transparency = None
+        if maskName in self._maskTransparencies:
+            transparency = self._maskTransparencies[maskName]
+        return transparency
 
-        pass
-
-    def _setMaskPlaneColor(self, maskplane, color):
+    def _setMaskPlaneColor(self, maskName, color):
         """Specify mask color """
         _fireflyClient.remove_mask(plot_id=str(self.display.frame),
-                                   mask_id=maskplane)
-        if (color != 'ignore'):
-            _fireflyClient.add_mask(bit_number=self._maskDict[maskplane],
+                                   mask_id=maskName)
+        self._maskPlaneColors[maskName] = color
+        if (color.lower() != 'ignore'):
+            _fireflyClient.add_mask(bit_number=self._maskDict[maskName],
                                     image_number=1,
                                     plot_id=str(self.display.frame),
-                                    mask_id=maskplane,
-                                    color=self.display.getMaskPlaneColor(maskplane),
+                                    mask_id=maskName,
+                                    color=self.display.getMaskPlaneColor(maskName),
                                     file_on_server=self._fireflyFitsID)
 
     def _show(self):
