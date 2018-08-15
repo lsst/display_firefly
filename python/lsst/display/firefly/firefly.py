@@ -424,7 +424,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                                                   action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
                                                   payload={'plotId': str(self.display.frame),
                                                            'imageOverlayId': k,
-                                                           'attributes': {'opacity': transparency/100.},
+                                                           'attributes': {'opacity':1.0 - transparency/100.},
                                                            'doReplot': False})
 
     def _getMaskTransparency(self, maskName):
