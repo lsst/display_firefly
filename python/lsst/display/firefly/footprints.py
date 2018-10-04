@@ -24,7 +24,39 @@
 # @file
 # @brief Support for LSST footprints, specific to Firefly
 
-def create_footprint_dict(catalog, contents='all', xy0 = afwGeom.Point2I(0,0),
+import numpy as np
+import lsst.afw.geom as afwGeom
+from firefly_client import plot
+
+
+def record_selector(record, selection):
+    """Select records from source catalog
+
+    Parameters:
+    -----------
+    record : `lsst.afw.detect.SourceRecord`
+        record to select
+    selection : `str`
+        'all' to select all records. 'parents' to select records with
+        more than zero children. 'children' to select records with
+        non-zero parents. 'isolated' to select records that are not blended,
+        meaning zero parents and zero children.
+        Values to check for sel
+    """
+    nChildren = record.get('deblend_nChild')
+    parentId = record.getParent()
+    if selection == 'all':
+        return True
+    elif selection == 'parents':
+        return (nChildren > 0)
+    elif selection == 'children':
+        return (parentId > 0)
+    elif selection == 'isolated':
+        return ((parentId == 0) and (nChildren == 0))
+    else:
+        raise RuntimeError('invalid selection: {}'.format(selection))
+
+def create_footprint_dict(catalog, selection='all', xy0 = afwGeom.Point2I(0,0),
                           pixelsys='zero-based'):
     """Create footprint structure from SourceCatalog
 
@@ -32,8 +64,8 @@ def create_footprint_dict(catalog, contents='all', xy0 = afwGeom.Point2I(0,0),
     -----------
     catalog : `lsst.afw.table.SourceCatalog`
         Source catalog from which to generate footprints
-    contents: `str`, default 'all'
-        Include 'all', 'parents', or 'children' footprints
+    selection: `str`, default 'all'
+        Include 'all', 'parents','children', or 'isolated' footprints
     xy0 : `lsst.afw.geom.Point2I`, default afwGeom.Point2I(0,0)
         Pixel origin to subtract off from the footprint coordinates
     pixelsys : `str`, default 'zero-based'
@@ -45,23 +77,76 @@ def create_footprint_dict(catalog, contents='all', xy0 = afwGeom.Point2I(0,0),
     """
     x0, y0 = xy0
     footd = dict(pixelsys=pixelsys, feet=dict())
-    def selector(x, contents):
-        if contents == 'all':
-            return True
-        elif contents == 'parents':
-            return (x > 0)
-        elif contents == 'children':
-            return (x == 0)
-        else:
-            raise RuntimeError('invalid contents: {}'.format(contents))
-    for record in scarletCat:
-        if selector(record.get('deblend_nChild')):
+    for record in catalog:
+        if record_selector(record, selection):
             footprint = record.getFootprint()
-            footid = str(footprint.getId())
+            footid = str(record.getId())
+            fpbbox = footprint.getBBox()
+            corners = [(c.getX()-x0,c.getY()-y0) for c in fpbbox.getCorners()]
             spans = footprint.getSpans()
             scoords = [(s.getY()-y0, s.getX0()-x0, s.getX1()-x0) for s in spans]
             peaks = footprint.getPeaks()
             pcoords = [(p.getFx()-x0, p.getFy()-y0) for p in peaks]
             footd['feet'][footid] = dict(corners=corners, spans=scoords, peaks=pcoords)
     return footd
+
+def browse_sources(catalog, display, dataId, butler, bbox, image=True,
+                   imageType='deepCoadd_calexp', footprints=True,
+                   selection='all', reset_display=True):
+    """browse sources from a catalog using Firefly
+
+    Parameters:
+    -----------
+    catalog : `lsst.afw.table.SourceCatalog`
+        Table of sources
+    display : `lsst.afw.display.Display`
+        Display using the Firefly backend
+    dataId : `dict`
+        Data ID used to retrieve the catalog, used for retrieving the image
+    butler : `lsst.daf.persistence.Butler`
+        Butler instance used to retrieve the catalog
+    bbox : `lsst.afw.geom.Box2I`
+        Bounding box for the catalog, image and the footprints
+    image : `bool`
+        If True (default), retrieve and display the subimage corresponding to
+        the dataId and the bounding box
+    imageType : `str`
+        DatasetType for the image to retrieve from the butler instance, if
+        image is True. '_sub' will be appended to retrieve a subimage.
+    footprints: `bool`
+        If True (default), overlay footprints from the catalog
+    selection: `str`, default 'all'
+        Include 'all', 'parents', 'children', or 'isolated' footprints
+    reset_display: `bool`
+        If True (default) and image is True, reset the display
+    """
+    fc = display._client
+
+    if image:
+        if reset_display:
+            fc.reinit_viewer()
+            fc.add_cell(row=2, col=0, width=4, height=2, element_type='tables',
+                cell_id='main')
+            fc.add_cell(row=0, col=0, width=2, height=3, element_type='images',
+                cell_id='image-%s' % str(display.frame))
+            fc.add_cell(row=0, col=2, width=2, height=3, element_type='xyPlots',
+                cell_id='plots')
+        calexp = butler.get(imageType + '_sub', bbox=bbox, dataId=dataId)
+        # currently need to zero out the xy0 for overlay to work
+        calexp.setXY0(afwGeom.Point2I(0,0))
+        display.mtv(calexp)
+
+    cat_select = np.array([(bbox.contains(afwGeom.Point2I(r.getX(), r.getY())) and
+                            record_selector(r, selection))
+                          for r in catalog])
+    cat_subset = catalog.subset(cat_select)
+    plot.upload_table(cat_subset, 'Sources_%s_%s' % (selection, str(display.frame)))
+
+    if footprints:
+        fpdata = create_footprint_dict(cat_subset, selection=selection,
+                                       xy0=bbox.getBegin())
+        fc.overlay_footprints(fpdata,
+                              'catalog footprints %s %s' % (selection, str(display.frame)),
+                              'footprints_%s_%s'%(selection,
+                                        str(display.frame)))
 

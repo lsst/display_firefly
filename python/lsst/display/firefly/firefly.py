@@ -158,7 +158,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
             extraParams = dict(Title=title,
                                MultiImageIdx=0,
-                               PredefinedOverlayIds=' ')
+                               PredefinedOverlayIds=' ',
+                               viewer_id='image-' + str(self.frame))
                         # Firefly's Javascript API requires a space for parameters;
                         # otherwise the parameter will be ignored
 
