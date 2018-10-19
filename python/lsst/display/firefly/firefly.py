@@ -480,3 +480,77 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._lastPan = [colc+0.5, rowc+0.5] # saved for future use in _mtv
         # Firefly's internal convention is first pixel is (0.5, 0.5)
         _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
+
+    # Extensions to the API that are specific to using the Firefly backend
+
+    def getClient(self):
+        """Get the instance of FireflyClient for this display
+
+        Returns:
+        --------
+        `firefly_client.FireflyClient`
+            Instance of FireflyClient used by this display
+        """
+        return self._client
+
+    def clearViewer(self):
+        """Reinitialize the viewer
+        """
+        self._client.reinit_viewer()
+
+    def resetLayout(self):
+        """Reset the layout of the Firefly Slate browser
+
+        Clears the display and adds Slate cells to display image in upper left,
+        plot area in upper right, and plots stretch across the bottom
+        """
+        self.clearViewer()
+        self._client.add_cell(row=2, col=0, width=4, height=2, element_type='tables',
+            cell_id='tables')
+        self._client.add_cell(row=0, col=0, width=2, height=3, element_type='images',
+            cell_id='image-%s' % str(self.display.frame))
+        self._client.add_cell(row=0, col=2, width=2, height=3, element_type='xyPlots',
+            cell_id='plots')
+
+    def overlayFootprints(self, catalog, color='rgba(74,144,226,0.60)',
+                          highlight_color='cyan', select_color='orange',
+                          style='fill', layer_string='detection footprints ',
+                          title='catalog footprints '):
+        """Overlay outlines of footprints from a catalog
+
+        Overlay outlines of LSST footprints from the input catalog. The colors
+        and style can be specified as parameters, and the base color and style
+        can be changed in the Firefly browser user interface.
+
+        Parameters:
+        -----------
+        catalog : `lsst.afw.table.SourceCatalog`
+            Source catalog from which to display footprints.
+        color : `str`
+            Color for footprints overlay
+        highlight_color : `str`
+            Color for highlighted footprints
+        select_color : `str`
+            Color for selected footprints
+        style : {'fill', 'outline'}
+            Style of footprints display, filled or outline
+        layer_string: `str`
+            Name of footprints layer string, to concatenate with the frame
+            Re-using the layer_string will overwrite the previous table and
+            footprints
+        title_string: `str`
+            Title of catalog, to concatenate with the frame
+        """
+        footprint_table = create_footprints_table(catalog)
+        with tempfile.NamedTemporaryFile() as fd:
+            footprint_table.to_xml(fd.name)
+            tableval = self._client.upload_file(fd.name)
+        self._client.overlay_footprints(footprint_file=tableval,
+                              title=title + str(self.display.frame),
+                              footprint_layer_id=layer_string + str(self.display.frame),
+                              plot_id=str(self.display.frame),
+                              color=color,
+                              highlight_color=highlight_color,
+                              select_color=select_color)
+
+

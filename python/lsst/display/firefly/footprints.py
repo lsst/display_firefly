@@ -24,8 +24,18 @@
 # @file
 # @brief Support for LSST footprints, specific to Firefly
 
+from copy import deepcopy
+import io
+import tempfile
+
 import numpy as np
+from astropy.io.votable.tree import VOTableFile, Resource, Field, Info
+from astropy.io.votable import from_table
+from astropy.table import Table, Column
+import astropy.units as u
+
 import lsst.afw.geom as afwGeom
+
 from firefly_client import plot
 
 
@@ -90,7 +100,113 @@ def create_footprint_dict(catalog, selection='all', xy0 = afwGeom.Point2I(0,0),
             footd['feet'][footid] = dict(corners=corners, spans=scoords, peaks=pcoords)
     return footd
 
-def browse_sources(catalog, display, dataId, butler, bbox, image=True,
+
+def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0)):
+    """make a VOTable of SourceData table and footprints
+
+    Parameters:
+    -----------
+    dataId : `dict`
+        Data ID used to retrieve the catalog, used for retrieving the image
+    butler : `lsst.daf.persistence.Butler`
+        Butler instance used to retrieve the catalog
+    dataType : `str`
+        DatasetType for the catalog to retrieve from the butler instance
+    xy0 : `lsst.afw.geom.Point2I`, default afwGeom.Point2I(0,0)
+        Pixel origin to subtract off from the footprint coordinates
+
+    Returns:
+    --------
+    `astropy.io.votable.VOTableFile`
+        VOTable object to upload to Firefly
+    """
+    with tempfile.NamedTemporaryFile() as fd:
+        catalog.writeFits(fd.name)
+        sourceTable = Table.read(fd.name, hdu=1)
+
+    # Fix invalid unit strings of "seconds"
+    sourceTable['modelfit_CModel_dev_time'].unit = u.s
+    sourceTable['modelfit_CModel_initial_time'].unit = u.s
+    sourceTable['modelfit_CModel_exp_time'].unit = u.s
+
+    inputvofile = from_table(sourceTable)
+    inputvotable = inputvofile.get_first_table()
+    outtable = deepcopy(inputvotable)
+
+    votablefile = VOTableFile()
+    resource = Resource()
+    votablefile.resources.append(resource)
+    resource.tables.append(outtable)
+    outtable.fields.insert(6, Field(votablefile, name='family_id', datatype='long', arraysize='1'))
+    outtable.fields.insert(7, Field(votablefile, name='category', datatype='unicodeChar', arraysize='*'))
+    for f in [
+        Field(votablefile, name="spans", datatype="int", arraysize="*"),
+        Field(votablefile, name="peaks", datatype="float", arraysize="*"),
+        Field(votablefile, name='footprint_corner1_x', datatype="int", arraysize="1"),
+        Field(votablefile, name='footprint_corner1_y', datatype="int", arraysize="1"),
+        Field(votablefile, name='footprint_corner2_x', datatype="int", arraysize="1"),
+        Field(votablefile, name='footprint_corner2_y', datatype="int", arraysize="1")]:
+        outtable.fields.append(f)
+
+    # This next step destroys the existing data
+    outtable.create_arrays(nrows=len(sourceTable))
+
+    x0, y0 = xy0
+    spanlist = []
+    peaklist = []
+    familylist = []
+    categorylist = []
+    fpxll = []
+    fpyll = []
+    fpxur = []
+    fpyur = []
+    for record in catalog:
+        footprint = record.getFootprint()
+        recordid = record.getId()
+        spans = footprint.getSpans()
+        scoords = [(s.getY()-y0, s.getX0()-x0, s.getX1()-x0) for s in spans]
+        fpbbox = footprint.getBBox()
+        corners = [(c.getX()-x0,c.getY()-y0) for c in fpbbox.getCorners()]
+        fpxll.append(corners[0][0])
+        fpyll.append(corners[0][1])
+        fpxur.append(corners[2][0])
+        fpyur.append(corners[2][1])
+        peaks = footprint.getPeaks()
+        pcoords = [(p.getFx()-x0, p.getFy()-y0) for p in peaks]
+        parentid = record.getParent()
+        nchild = record.get('deblend_nChild')
+        if (parentid == 0):
+            familylist.append(recordid)
+            if (nchild > 0):
+                # blended parent
+                categorylist.append('blended parent')
+            else:
+                # isolated
+                categorylist.append('isolated')
+        else:
+            # deblended child
+            familylist.append(parentid)
+            categorylist.append('deblended child')
+        spanlist.append(scoords)
+        peaklist.append(pcoords)
+
+    for i in range(len(inputvotable.array)):
+        row = inputvotable.array[i]
+        startlist = [row.item(0)[k] for k in range(len(row))]
+        startlist.insert(6, familylist[i])
+        startlist.insert(7, categorylist[i])
+        startlist = startlist + [spanlist[i], peaklist[i],
+                            fpxll[i], fpyll[i], fpxur[i], fpyur[i]]
+        outtable.array[i] = tuple(startlist)
+
+    outtable.infos.append(Info(name='contains_lsst_footprints', value='true'))
+    outtable.infos.append(Info(name='contains_lsst_measurements', value='true'))
+
+    outtable.format = 'tabledata'
+
+    return(votablefile)
+
+def browse_footprints(catalog, display, dataId, butler, bbox=None, image=True,
                    imageType='deepCoadd_calexp', footprints=True,
                    selection='all', reset_display=True):
     """browse sources from a catalog using Firefly
@@ -126,27 +242,35 @@ def browse_sources(catalog, display, dataId, butler, bbox, image=True,
         if reset_display:
             fc.reinit_viewer()
             fc.add_cell(row=2, col=0, width=4, height=2, element_type='tables',
-                cell_id='main')
+                cell_id='tables')
             fc.add_cell(row=0, col=0, width=2, height=3, element_type='images',
                 cell_id='image-%s' % str(display.frame))
             fc.add_cell(row=0, col=2, width=2, height=3, element_type='xyPlots',
                 cell_id='plots')
-        calexp = butler.get(imageType + '_sub', bbox=bbox, dataId=dataId)
+        if isinstance(bbox, afwGeom.Box2I):
+            calexp = butler.get(imageType + '_sub', bbox=bbox, dataId=dataId)
+        else:
+            calexp = butler.get(imageType, dataId=dataId)
         # currently need to zero out the xy0 for overlay to work
-        calexp.setXY0(afwGeom.Point2I(0,0))
+        #calexp.setXY0(afwGeom.Point2I(0,0))
         display.mtv(calexp)
 
-    cat_select = np.array([(bbox.contains(afwGeom.Point2I(r.getX(), r.getY())) and
+    if isinstance(bbox, afwGeom.Box2I):
+        cat_select = np.array([(bbox.contains(afwGeom.Point2I(r.getX(), r.getY())) and
                             record_selector(r, selection))
                           for r in catalog])
-    cat_subset = catalog.subset(cat_select)
-    plot.upload_table(cat_subset, 'Sources_%s_%s' % (selection, str(display.frame)))
+        cat_subset = catalog.subset(cat_select)
+    else:
+        cat_subset = catalog
 
     if footprints:
-        fpdata = create_footprint_dict(cat_subset, selection=selection,
-                                       xy0=bbox.getBegin())
-        fc.overlay_footprints(fpdata,
-                              'catalog footprints %s %s' % (selection, str(display.frame)),
-                              'footprints_%s_%s'%(selection,
-                                        str(display.frame)))
+        footprint_table = create_footprints_table(cat_subset)
+        with tempfile.NamedTemporaryFile() as fd:
+            footprint_table.to_xml(fd.name)
+            tableval = display._client.upload_file(fd.name)
+        fc.overlay_footprints(footprint_file=tableval,
+                              title='catalog footprints %s %s' % (selection, str(display.frame)),
+                              footprint_layer_id='footprints_%s_%s'%(selection,
+                                        str(display.frame)),
+                              plot_id=str(display.frame), color='rgba(74,144,226,0.30)')
 
