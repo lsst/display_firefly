@@ -37,6 +37,8 @@ import lsst.afw.display.displayLib as displayLib
 import lsst.afw.math as afwMath
 import lsst.log
 
+from .footprints import create_footprints_table
+
 try:
     import firefly_client
     _fireflyClient = None
