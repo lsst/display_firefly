@@ -1,9 +1,10 @@
+# This file is part of {{ cookiecutter.package_name }}.
 #
-# LSST Data Management System
-# Copyright 2018 LSST Corporation.
-#
-# This product includes software developed by the
-# LSST Project (http://www.lsst.org/).
+# Developed for the LSST Data Management System.
+# This product includes software developed by the LSST Project
+# (https://www.lsst.org).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,17 +16,10 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the LSST License Statement and
-# the GNU General Public License along with this program.  If not,
-# see <http://www.lsstcorp.org/LegalNotices/>.
-#
-
-##
-# @file
-# @brief Support for LSST footprints, specific to Firefly
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from copy import deepcopy
-import io
 import tempfile
 
 import numpy as np
@@ -35,7 +29,6 @@ from astropy.table import Table
 import astropy.units as u
 
 import lsst.afw.geom as afwGeom
-
 
 
 def record_selector(record, selection):
@@ -63,12 +56,12 @@ def record_selector(record, selection):
     elif selection == 'isolated':
         return ((parentId == 0) and (nChildren == 0))
     else:
-        raise RuntimeError('invalid selection: {}'.format(selection) + 
+        raise RuntimeError('invalid selection: {}'.format(selection) +
                            '\nMust be one of "all", "blended parents", ' +
                            '"deblended children", "isolated"')
 
 
-def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
+def create_footprints_table(catalog, xy0=None,
                             insert_column=6):
     """make a VOTable of SourceData table and footprints
 
@@ -76,9 +69,9 @@ def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
     -----------
     catalog : `lsst.afw.table.SourceCatalog`
             Source catalog from which to display footprints.
-    xy0 : `lsst.afw.geom.Point2I`, default afwGeom.Point2I(0,0)
+    xy0 : tuple or list or None
         Pixel origin to subtract off from the footprint coordinates.
-        Normally this can be left at the default.
+        If None, the value used is (0,0)
     insert_column : `int`
         Column at which to insert the "family_id" and "category" columns
 
@@ -87,6 +80,8 @@ def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
     `astropy.io.votable.VOTableFile`
         VOTable object to upload to Firefly
     """
+    if xy0 is None:
+        xy0 = afwGeom.Point2I(0, 0)
     with tempfile.NamedTemporaryFile() as fd:
         catalog.writeFits(fd.name)
         sourceTable = Table.read(fd.name, hdu=1)
@@ -110,12 +105,12 @@ def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
     outtable.fields.insert(insert_column+1, Field(votablefile, name='category',
                                                   datatype='unicodeChar', arraysize='*'))
     for f in [
-        Field(votablefile, name="spans", datatype="int", arraysize="*"),
-        Field(votablefile, name="peaks", datatype="float", arraysize="*"),
-        Field(votablefile, name='footprint_corner1_x', datatype="int", arraysize="1"),
-        Field(votablefile, name='footprint_corner1_y', datatype="int", arraysize="1"),
-        Field(votablefile, name='footprint_corner2_x', datatype="int", arraysize="1"),
-        Field(votablefile, name='footprint_corner2_y', datatype="int", arraysize="1")]:
+            Field(votablefile, name="spans", datatype="int", arraysize="*"),
+            Field(votablefile, name="peaks", datatype="float", arraysize="*"),
+            Field(votablefile, name='footprint_corner1_x', datatype="int", arraysize="1"),
+            Field(votablefile, name='footprint_corner1_y', datatype="int", arraysize="1"),
+            Field(votablefile, name='footprint_corner2_x', datatype="int", arraysize="1"),
+            Field(votablefile, name='footprint_corner2_y', datatype="int", arraysize="1")]:
         outtable.fields.append(f)
 
     # This next step destroys the existing data
@@ -136,7 +131,7 @@ def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
         spans = footprint.getSpans()
         scoords = [(s.getY()-y0, s.getX0()-x0, s.getX1()-x0) for s in spans]
         fpbbox = footprint.getBBox()
-        corners = [(c.getX()-x0,c.getY()-y0) for c in fpbbox.getCorners()]
+        corners = [(c.getX()-x0, c.getY()-y0) for c in fpbbox.getCorners()]
         fpxll.append(corners[0][0])
         fpyll.append(corners[0][1])
         fpxur.append(corners[2][0])
@@ -166,30 +161,30 @@ def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
         startlist.insert(insert_column, familylist[i])
         startlist.insert(insert_column+1, categorylist[i])
         startlist = startlist + [spanlist[i], peaklist[i],
-                            fpxll[i], fpyll[i], fpxur[i], fpyur[i]]
+                                 fpxll[i], fpyll[i], fpxur[i], fpyur[i]]
         outtable.array[i] = tuple(startlist)
 
     outtable.infos.append(Info(name='contains_lsst_footprints', value='true'))
     outtable.infos.append(Info(name='contains_lsst_measurements', value='true'))
     outtable.infos.append(Info(name='FootPrintColumnNames',
                                value='id;footprint_corner1_x;footprint_corner1_y;' +
-                              'footprint_corner2_x;footprint_corner2_y;spans;peaks'))
+                               'footprint_corner2_x;footprint_corner2_y;spans;peaks'))
     outtable.infos.append(Info(name='pixelsys', value='zero-based'))
     # Check whether the coordinates are included and are valid
-    if (('coord_ra' in sourceTable.colnames)
-        and ('coord_dec' in sourceTable.colnames)
-        and np.isfinite(sourceTable['coord_ra']).any()
-        and np.isfinite(sourceTable['coord_dec']).any()):
-        coord_column_string = 'coord_ra;coord_dec;EQ_J2000'
-    elif (('base_SdssCentroid_x' in sourceTable.colnames)
-        and ('base_SdssCentroid_y' in sourceTable.colnames)
-        and np.isfinite(sourceTable['base_SdssCentroid_x']).any()
-        and np.isfinite(sourceTable['base_SdssCentroid_y']).any()):
+    if (('coord_ra' in sourceTable.colnames) and
+            ('coord_dec' in sourceTable.colnames) and
+            np.isfinite(sourceTable['coord_ra']).any() and
+            np.isfinite(sourceTable['coord_dec']).any()):
+        coord_column_string = 'coord_rafla;coord_dec;EQ_J2000'
+    elif (('base_SdssCentroid_x' in sourceTable.colnames) and
+            ('base_SdssCentroid_y' in sourceTable.colnames) and
+            np.isfinite(sourceTable['base_SdssCentroid_x']).any() and
+            np.isfinite(sourceTable['base_SdssCentroid_y']).any()):
         coord_column_string = 'base_SdssCentroid_x;base_SdssCentroid_y;ZERO_BASED'
-    elif (('base_NaiveCentroid_x' in sourceTable.colnames)
-        and ('base_NaiveCentroid_y' in sourceTable.colnames)
-        and np.isfinite(sourceTable['base_NaiveCentroid_x']).any()
-        and np.isfinite(sourceTable['base_NaiveCentroid_y']).any()):
+    elif (('base_NaiveCentroid_x' in sourceTable.colnames) and
+            ('base_NaiveCentroid_y' in sourceTable.colnames) and
+            np.isfinite(sourceTable['base_NaiveCentroid_x']).any() and
+            np.isfinite(sourceTable['base_NaiveCentroid_y']).any()):
         coord_column_string = 'base_NaiveCentroid_x;base_NaiveCentroid_y;ZERO-BASED'
     else:
         raise RuntimeError('No valid coordinate columns in catalog')
@@ -199,4 +194,3 @@ def create_footprints_table(catalog, xy0 = afwGeom.Point2I(0,0),
     outtable.format = 'tabledata'
 
     return(votablefile)
-
