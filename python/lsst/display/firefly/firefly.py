@@ -20,10 +20,6 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
-##
-## \file
-## \brief Definitions to talk to firefly from python
-
 from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
@@ -46,19 +42,16 @@ except ImportError as e:
     raise RuntimeError("Cannot import firefly_client: %s" % (e))
 from ws4py.client import HandshakeError
 
+
 class FireflyError(Exception):
 
     def __init__(self, str):
         Exception.__init__(self, str)
 
-#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
 
 def firefly_version():
     """Return the version of firefly_client in use, as a string"""
     return(firefly_client.__version__)
-
-#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 
 class DisplayImpl(virtualDevice.DisplayImpl):
@@ -107,7 +100,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if not localbrowser and not self.verbose:
                 _fireflyClient.display_url()
             if self.verbose:
-               print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
+                print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
@@ -155,23 +148,22 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
-                fd.seek(0,0)
+                fd.seek(0, 0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
             extraParams = dict(Title=title,
                                MultiImageIdx=0,
                                PredefinedOverlayIds=' ',
                                viewer_id='image-' + str(self.frame))
-                        # Firefly's Javascript API requires a space for parameters;
-                        # otherwise the parameter will be ignored
+            # Firefly's Javascript API requires a space for parameters;
+            # otherwise the parameter will be ignored
 
             if self._lastZoom:
                 extraParams['InitZoomLevel'] = self._lastZoom
                 extraParams['ZoomType'] = 'LEVEL'
             if self._lastPan:
                 extraParams['InitialCenterPosition'] = '{0:.3f};{1:.3f};PIXEL'.format(
-                                                        self._lastPan[0],
-                                                        self._lastPan[1])
+                    self._lastPan[0], self._lastPan[1])
             if self._lastStretch:
                 extraParams['RangeValues'] = self._lastStretch
 
@@ -187,7 +179,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fdm:
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
-                fdm.seek(0,0)
+                fdm.seek(0, 0)
                 self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
 
             maskPlaneDict = mask.getMaskPlaneDict()
@@ -197,9 +189,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
             for k in self._maskDict:
                 if (((1 << self._maskDict[k]) & usedPlanes) and
-                    (k in self._maskPlaneColors) and
-                    (self._maskPlaneColors[k] is not None) and
-                    (self._maskPlaneColors[k].lower() != 'ignore')):
+                        (k in self._maskPlaneColors) and
+                        (self._maskPlaneColors[k] is not None) and
+                        (self._maskPlaneColors[k].lower() != 'ignore')):
                     _fireflyClient.add_mask(bit_number=self._maskDict[k],
                                             image_number=0,
                                             plot_id=str(self.display.frame),
@@ -399,8 +391,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         rval = {}
         if interval_type is not 'zscale':
-            rval = _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
-                                       lower_value=min, upper_value=max, **kwargs)
+            rval = _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type,
+                                              algorithm=algorithm, lower_value=min,
+                                              upper_value=max, **kwargs)
         else:
             if 'zscale_contrast' not in kwargs:
                 kwargs['zscale_contrast'] = 25
@@ -408,12 +401,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 kwargs['zscale_samples'] = 600
             if 'zscale_samples_perline' not in kwargs:
                 kwargs['zscale_samples_perline'] = 120
-            rval = _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
-                                       **kwargs)
+            rval = _fireflyClient.set_stretch(str(self.display.frame), stype='zscale',
+                                              algorithm=algorithm, **kwargs)
 
         if 'rv_string' in rval:
             self._lastStretch = rval['rv_string']
-
 
     def _setMaskTransparency(self, transparency, maskName):
         """Specify mask transparency (percent); or None to not set it when loading masks"""
@@ -427,7 +419,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                                                   action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
                                                   payload={'plotId': str(self.display.frame),
                                                            'imageOverlayId': k,
-                                                           'attributes': {'opacity':1.0 - transparency/100.},
+                                                           'attributes': {'opacity': 1.0 - transparency/100.},
                                                            'doReplot': False})
 
     def _getMaskTransparency(self, maskName):
@@ -452,7 +444,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        localbrowser,  url = _fireflyClient.launch_browser(verbose=self.verbose)
+        localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
         if not localbrowser and not self.verbose:
             _fireflyClient.display_url()
     #
@@ -479,7 +471,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             column and row in units of pixels (zero-based convention,
               with the xy0 already subtracted off)
         """
-        self._lastPan = [colc+0.5, rowc+0.5] # saved for future use in _mtv
+        self._lastPan = [colc+0.5, rowc+0.5]  # saved for future use in _mtv
         # Firefly's internal convention is first pixel is (0.5, 0.5)
         _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
 
@@ -508,11 +500,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """
         self.clearViewer()
         self._client.add_cell(row=2, col=0, width=4, height=2, element_type='tables',
-            cell_id='tables')
+                              cell_id='tables')
         self._client.add_cell(row=0, col=0, width=2, height=3, element_type='images',
-            cell_id='image-%s' % str(self.display.frame))
+                              cell_id='image-%s' % str(self.display.frame))
         self._client.add_cell(row=0, col=2, width=2, height=3, element_type='xyPlots',
-            cell_id='plots')
+                              cell_id='plots')
 
     def overlayFootprints(self, catalog, color='rgba(74,144,226,0.60)',
                           highlight_color='cyan', select_color='orange',
@@ -548,11 +540,10 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             footprint_table.to_xml(fd.name)
             tableval = self._client.upload_file(fd.name)
         self._client.overlay_footprints(footprint_file=tableval,
-                              title=title + str(self.display.frame),
-                              footprint_layer_id=layer_string + str(self.display.frame),
-                              plot_id=str(self.display.frame),
-                              color=color,
-                              highlight_color=highlight_color,
-                              select_color=select_color)
-
-
+                                        title=title + str(self.display.frame),
+                                        footprint_layer_id=layer_string + str(self.display.frame),
+                                        plot_id=str(self.display.frame),
+                                        color=color,
+                                        highlight_color=highlight_color,
+                                        select_color=select_color,
+                                        style=style)
