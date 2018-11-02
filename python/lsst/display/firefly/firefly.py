@@ -33,7 +33,7 @@ import lsst.afw.display.displayLib as displayLib
 import lsst.afw.math as afwMath
 import lsst.log
 
-from .footprints import create_footprints_table
+from .footprints import createFootprintsTable
 
 try:
     import firefly_client
@@ -507,9 +507,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                               cell_id='plots')
 
     def overlayFootprints(self, catalog, color='rgba(74,144,226,0.60)',
-                          highlight_color='cyan', select_color='orange',
-                          style='fill', layer_string='detection footprints ',
-                          title='catalog footprints '):
+                          highlightColor='cyan', selectColor='orange',
+                          style='fill', layerString='detection footprints ',
+                          titleString='catalog footprints '):
         """Overlay outlines of footprints from a catalog
 
         Overlay outlines of LSST footprints from the input catalog. The colors
@@ -521,29 +521,32 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         catalog : `lsst.afw.table.SourceCatalog`
             Source catalog from which to display footprints.
         color : `str`
-            Color for footprints overlay
-        highlight_color : `str`
+            Color for footprints overlay. Colors can be specified as a name
+            like 'cyan' or afwDisplay.RED; as an rgb value such as
+            'rgb(80,100,220)'; or as rgb plus alpha (transparency) such
+            as 'rgba('74,144,226,0.60)'.
+        highlightColor : `str`
             Color for highlighted footprints
-        select_color : `str`
+        selectColor : `str`
             Color for selected footprints
         style : {'fill', 'outline'}
             Style of footprints display, filled or outline
-        layer_string: `str`
+        layerString: `str`
             Name of footprints layer string, to concatenate with the frame
             Re-using the layer_string will overwrite the previous table and
             footprints
-        title_string: `str`
+        titleString: `str`
             Title of catalog, to concatenate with the frame
         """
-        footprint_table = create_footprints_table(catalog)
+        footprintTable = createFootprintsTable(catalog)
         with tempfile.NamedTemporaryFile() as fd:
-            footprint_table.to_xml(fd.name)
+            footprintTable.to_xml(fd.name)
             tableval = self._client.upload_file(fd.name)
         self._client.overlay_footprints(footprint_file=tableval,
-                                        title=title + str(self.display.frame),
-                                        footprint_layer_id=layer_string + str(self.display.frame),
+                                        title=titleString + str(self.display.frame),
+                                        footprint_layer_id=layerString + str(self.display.frame),
                                         plot_id=str(self.display.frame),
                                         color=color,
-                                        highlight_color=highlight_color,
-                                        select_color=select_color,
+                                        highlight_color=highlightColor,
+                                        select_color=selectColor,
                                         style=style)
