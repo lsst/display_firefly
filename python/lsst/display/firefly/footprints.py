@@ -63,7 +63,7 @@ def recordSelector(record, selection):
 
 
 def createFootprintsTable(catalog, xy0=None,
-                            insertColumn=6):
+                            insertColumn=4):
     """make a VOTable of SourceData table and footprints
 
     Parameters:
