@@ -29,9 +29,10 @@ from astropy.table import Table
 import astropy.units as u
 
 import lsst.afw.geom as afwGeom
+import lsst.afw.table as afwTable
 
 
-def record_selector(record, selection):
+def recordSelector(record, selection):
     """Select records from source catalog
 
     Parameters:
@@ -61,8 +62,8 @@ def record_selector(record, selection):
                            '"deblended children", "isolated"')
 
 
-def create_footprints_table(catalog, xy0=None,
-                            insert_column=6):
+def createFootprintsTable(catalog, xy0=None,
+                            insertColumn=6):
     """make a VOTable of SourceData table and footprints
 
     Parameters:
@@ -72,62 +73,72 @@ def create_footprints_table(catalog, xy0=None,
     xy0 : tuple or list or None
         Pixel origin to subtract off from the footprint coordinates.
         If None, the value used is (0,0)
-    insert_column : `int`
+    insertColumn : `int`
         Column at which to insert the "family_id" and "category" columns
 
     Returns:
     --------
-    `astropy.io.votable.VOTableFile`
+    `astropy.io.votable.voTableFile`
         VOTable object to upload to Firefly
     """
     if xy0 is None:
         xy0 = afwGeom.Point2I(0, 0)
-    with tempfile.NamedTemporaryFile() as fd:
-        catalog.writeFits(fd.name)
-        sourceTable = Table.read(fd.name, hdu=1)
+
+    _catalog = afwTable.SourceCatalog(catalog.table.clone())
+    _catalog.extend(catalog, deep=True)
+    sourceTable = _catalog.asAstropy()
 
     # Fix invalid unit strings of "seconds"
-    for col_name in ['modelfit_CModel_dev_time', 'modelfit_CModel_initial_time',
+    # Ticket DM-16411 has been filed to fix this upstream
+    for colName in ['modelfit_CModel_dev_time', 'modelfit_CModel_initial_time',
                      'modelfit_CModel_exp_time']:
-        if col_name in sourceTable.colnames:
-            sourceTable[col_name].unit = u.s
+        if colName in sourceTable.colnames:
+            sourceTable[colName].unit = u.s
 
-    inputvofile = from_table(sourceTable)
-    inputvotable = inputvofile.get_first_table()
-    outtable = deepcopy(inputvotable)
+    # Change int64 dtypes so they convert to VOTable
+    for colName in sourceTable.colnames:
+        if sourceTable[colName].dtype.num == 9:
+            sourceTable[colName].dtype = np.dtype('long')
 
-    votablefile = VOTableFile()
+    # Convert the astropy.table.Table to astropy.vo.voTableFile
+    inputVoFile = from_table(sourceTable)
+    # Extract first (only) table
+    inputVoTable = inputVoFile.get_first_table()
+    # Make a copy of the table, because adding columns will cause the data
+    # to be destroyed, and we will have to copy the data back from the input
+    outTable = deepcopy(inputVoTable)
+
+    voTableFile = VOTableFile()
     resource = Resource()
-    votablefile.resources.append(resource)
-    resource.tables.append(outtable)
-    outtable.fields.insert(insert_column, Field(votablefile, name='family_id',
+    voTableFile.resources.append(resource)
+    resource.tables.append(outTable)
+    outTable.fields.insert(insertColumn, Field(voTableFile, name='family_id',
                                                 datatype='long', arraysize='1'))
-    outtable.fields.insert(insert_column+1, Field(votablefile, name='category',
+    outTable.fields.insert(insertColumn+1, Field(voTableFile, name='category',
                                                   datatype='unicodeChar', arraysize='*'))
-    for f in [
-            Field(votablefile, name="spans", datatype="int", arraysize="*"),
-            Field(votablefile, name="peaks", datatype="float", arraysize="*"),
-            Field(votablefile, name='footprint_corner1_x', datatype="int", arraysize="1"),
-            Field(votablefile, name='footprint_corner1_y', datatype="int", arraysize="1"),
-            Field(votablefile, name='footprint_corner2_x', datatype="int", arraysize="1"),
-            Field(votablefile, name='footprint_corner2_y', datatype="int", arraysize="1")]:
-        outtable.fields.append(f)
+    outTable.fields.extend([
+        Field(voTableFile, name="spans", datatype="int", arraysize="*"),
+        Field(voTableFile, name="peaks", datatype="float", arraysize="*"),
+        Field(voTableFile, name='footprint_corner1_x', datatype="int", arraysize="1"),
+        Field(voTableFile, name='footprint_corner1_y', datatype="int", arraysize="1"),
+        Field(voTableFile, name='footprint_corner2_x', datatype="int", arraysize="1"),
+        Field(voTableFile, name='footprint_corner2_y', datatype="int", arraysize="1")])
 
     # This next step destroys the existing data
-    outtable.create_arrays(nrows=len(sourceTable))
+    outTable.create_arrays(nrows=len(sourceTable))
 
     x0, y0 = xy0
-    spanlist = []
-    peaklist = []
-    familylist = []
-    categorylist = []
+    spanList = []
+    peakList = []
+    familyList = []
+    categoryList = []
     fpxll = []
     fpyll = []
     fpxur = []
     fpyur = []
     for record in catalog:
         footprint = record.getFootprint()
-        recordid = record.getId()
+        recordId = record.getId()
         spans = footprint.getSpans()
         scoords = [(s.getY()-y0, s.getX0()-x0, s.getX1()-x0) for s in spans]
         fpbbox = footprint.getBBox()
@@ -138,38 +149,37 @@ def create_footprints_table(catalog, xy0=None,
         fpyur.append(corners[2][1])
         peaks = footprint.getPeaks()
         pcoords = [(p.getFx()-x0, p.getFy()-y0) for p in peaks]
-        parentid = record.getParent()
-        nchild = record.get('deblend_nChild')
-        if (parentid == 0):
-            familylist.append(recordid)
-            if (nchild > 0):
+        parentId = record.getParent()
+        nChild = record.get('deblend_nChild')
+        if parentId == 0:
+            familyList.append(recordId)
+            if nChild > 0:
                 # blended parent
-                categorylist.append('blended parent')
+                categoryList.append('blended parent')
             else:
                 # isolated
-                categorylist.append('isolated')
+                categoryList.append('isolated')
         else:
             # deblended child
-            familylist.append(parentid)
-            categorylist.append('deblended child')
-        spanlist.append(scoords)
-        peaklist.append(pcoords)
+            familyList.append(parentId)
+            categoryList.append('deblended child')
+        spanList.append(scoords)
+        peakList.append(pcoords)
 
-    for i in range(len(inputvotable.array)):
-        row = inputvotable.array[i]
-        startlist = [row.item(0)[k] for k in range(len(row))]
-        startlist.insert(insert_column, familylist[i])
-        startlist.insert(insert_column+1, categorylist[i])
-        startlist = startlist + [spanlist[i], peaklist[i],
+    for i, row in enumerate(inputVoTable.array):
+        startList = [row.item(0)[k] for k in range(len(row))]
+        startList.insert(insertColumn, familyList[i])
+        startList.insert(insertColumn+1, categoryList[i])
+        startList = startList + [spanList[i], peakList[i],
                                  fpxll[i], fpyll[i], fpxur[i], fpyur[i]]
-        outtable.array[i] = tuple(startlist)
+        outTable.array[i] = tuple(startList)
 
-    outtable.infos.append(Info(name='contains_lsst_footprints', value='true'))
-    outtable.infos.append(Info(name='contains_lsst_measurements', value='true'))
-    outtable.infos.append(Info(name='FootPrintColumnNames',
+    outTable.infos.append(Info(name='contains_lsst_footprints', value='true'))
+    outTable.infos.append(Info(name='contains_lsst_measurements', value='true'))
+    outTable.infos.append(Info(name='FootPrintColumnNames',
                                value='id;footprint_corner1_x;footprint_corner1_y;' +
                                'footprint_corner2_x;footprint_corner2_y;spans;peaks'))
-    outtable.infos.append(Info(name='pixelsys', value='zero-based'))
+    outTable.infos.append(Info(name='pixelsys', value='zero-based'))
     # Check whether the coordinates are included and are valid
     if (('coord_ra' in sourceTable.colnames) and
             ('coord_dec' in sourceTable.colnames) and
@@ -188,9 +198,9 @@ def create_footprints_table(catalog, xy0=None,
         coord_column_string = 'base_NaiveCentroid_x;base_NaiveCentroid_y;ZERO-BASED'
     else:
         raise RuntimeError('No valid coordinate columns in catalog')
-    outtable.infos.append(Info(name='CatalogCoordColumns',
+    outTable.infos.append(Info(name='CatalogCoordColumns',
                                value=coord_column_string))
 
-    outtable.format = 'tabledata'
+    outTable.format = 'tabledata'
 
-    return(votablefile)
+    return(voTableFile)
