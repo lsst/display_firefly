@@ -531,6 +531,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             Color for selected footprints
         style : {'fill', 'outline'}
             Style of footprints display, filled or outline
+        insertColumn : `int`
+            Column at which to insert the "family_id" and "category" columns
         layerString: `str`
             Name of footprints layer string, to concatenate with the frame
             Re-using the layer_string will overwrite the previous table and
