@@ -20,10 +20,6 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
-##
-## \file
-## \brief Definitions to talk to firefly from python
-
 from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
@@ -37,6 +33,8 @@ import lsst.afw.display.displayLib as displayLib
 import lsst.afw.math as afwMath
 import lsst.log
 
+from .footprints import createFootprintsTable
+
 try:
     import firefly_client
     _fireflyClient = None
@@ -44,19 +42,16 @@ except ImportError as e:
     raise RuntimeError("Cannot import firefly_client: %s" % (e))
 from ws4py.client import HandshakeError
 
+
 class FireflyError(Exception):
 
     def __init__(self, str):
         Exception.__init__(self, str)
 
-#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
 
 def firefly_version():
     """Return the version of firefly_client in use, as a string"""
     return(firefly_client.__version__)
-
-#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 
 class DisplayImpl(virtualDevice.DisplayImpl):
@@ -105,7 +100,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if not localbrowser and not self.verbose:
                 _fireflyClient.display_url()
             if self.verbose:
-               print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
+                print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
@@ -153,22 +148,22 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fd:
                 displayLib.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
-                fd.seek(0,0)
+                fd.seek(0, 0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
             extraParams = dict(Title=title,
                                MultiImageIdx=0,
-                               PredefinedOverlayIds=' ')
-                        # Firefly's Javascript API requires a space for parameters;
-                        # otherwise the parameter will be ignored
+                               PredefinedOverlayIds=' ',
+                               viewer_id='image-' + str(self.frame))
+            # Firefly's Javascript API requires a space for parameters;
+            # otherwise the parameter will be ignored
 
             if self._lastZoom:
                 extraParams['InitZoomLevel'] = self._lastZoom
                 extraParams['ZoomType'] = 'LEVEL'
             if self._lastPan:
                 extraParams['InitialCenterPosition'] = '{0:.3f};{1:.3f};PIXEL'.format(
-                                                        self._lastPan[0],
-                                                        self._lastPan[1])
+                    self._lastPan[0], self._lastPan[1])
             if self._lastStretch:
                 extraParams['RangeValues'] = self._lastStretch
 
@@ -184,7 +179,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             with tempfile.NamedTemporaryFile() as fdm:
                 displayLib.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
-                fdm.seek(0,0)
+                fdm.seek(0, 0)
                 self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
 
             maskPlaneDict = mask.getMaskPlaneDict()
@@ -194,9 +189,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
             for k in self._maskDict:
                 if (((1 << self._maskDict[k]) & usedPlanes) and
-                    (k in self._maskPlaneColors) and
-                    (self._maskPlaneColors[k] is not None) and
-                    (self._maskPlaneColors[k].lower() != 'ignore')):
+                        (k in self._maskPlaneColors) and
+                        (self._maskPlaneColors[k] is not None) and
+                        (self._maskPlaneColors[k].lower() != 'ignore')):
                     _fireflyClient.add_mask(bit_number=self._maskDict[k],
                                             image_number=0,
                                             plot_id=str(self.display.frame),
@@ -396,8 +391,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         rval = {}
         if interval_type is not 'zscale':
-            rval = _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type, algorithm=algorithm,
-                                       lower_value=min, upper_value=max, **kwargs)
+            rval = _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type,
+                                              algorithm=algorithm, lower_value=min,
+                                              upper_value=max, **kwargs)
         else:
             if 'zscale_contrast' not in kwargs:
                 kwargs['zscale_contrast'] = 25
@@ -405,12 +401,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 kwargs['zscale_samples'] = 600
             if 'zscale_samples_perline' not in kwargs:
                 kwargs['zscale_samples_perline'] = 120
-            rval = _fireflyClient.set_stretch(str(self.display.frame), stype='zscale', algorithm=algorithm,
-                                       **kwargs)
+            rval = _fireflyClient.set_stretch(str(self.display.frame), stype='zscale',
+                                              algorithm=algorithm, **kwargs)
 
         if 'rv_string' in rval:
             self._lastStretch = rval['rv_string']
-
 
     def _setMaskTransparency(self, transparency, maskName):
         """Specify mask transparency (percent); or None to not set it when loading masks"""
@@ -424,7 +419,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                                                   action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
                                                   payload={'plotId': str(self.display.frame),
                                                            'imageOverlayId': k,
-                                                           'attributes': {'opacity':1.0 - transparency/100.},
+                                                           'attributes': {'opacity': 1.0 - transparency/100.},
                                                            'doReplot': False})
 
     def _getMaskTransparency(self, maskName):
@@ -449,7 +444,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        localbrowser,  url = _fireflyClient.launch_browser(verbose=self.verbose)
+        localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
         if not localbrowser and not self.verbose:
             _fireflyClient.display_url()
     #
@@ -476,6 +471,84 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             column and row in units of pixels (zero-based convention,
               with the xy0 already subtracted off)
         """
-        self._lastPan = [colc+0.5, rowc+0.5] # saved for future use in _mtv
+        self._lastPan = [colc+0.5, rowc+0.5]  # saved for future use in _mtv
         # Firefly's internal convention is first pixel is (0.5, 0.5)
         _fireflyClient.set_pan(plot_id=str(self.display.frame), x=colc, y=rowc)
+
+    # Extensions to the API that are specific to using the Firefly backend
+
+    def getClient(self):
+        """Get the instance of FireflyClient for this display
+
+        Returns:
+        --------
+        `firefly_client.FireflyClient`
+            Instance of FireflyClient used by this display
+        """
+        return self._client
+
+    def clearViewer(self):
+        """Reinitialize the viewer
+        """
+        self._client.reinit_viewer()
+
+    def resetLayout(self):
+        """Reset the layout of the Firefly Slate browser
+
+        Clears the display and adds Slate cells to display image in upper left,
+        plot area in upper right, and plots stretch across the bottom
+        """
+        self.clearViewer()
+        self._client.add_cell(row=2, col=0, width=4, height=2, element_type='tables',
+                              cell_id='tables')
+        self._client.add_cell(row=0, col=0, width=2, height=3, element_type='images',
+                              cell_id='image-%s' % str(self.display.frame))
+        self._client.add_cell(row=0, col=2, width=2, height=3, element_type='xyPlots',
+                              cell_id='plots')
+
+    def overlayFootprints(self, catalog, color='rgba(74,144,226,0.60)',
+                          highlightColor='cyan', selectColor='orange',
+                          style='fill', layerString='detection footprints ',
+                          titleString='catalog footprints '):
+        """Overlay outlines of footprints from a catalog
+
+        Overlay outlines of LSST footprints from the input catalog. The colors
+        and style can be specified as parameters, and the base color and style
+        can be changed in the Firefly browser user interface.
+
+        Parameters:
+        -----------
+        catalog : `lsst.afw.table.SourceCatalog`
+            Source catalog from which to display footprints.
+        color : `str`
+            Color for footprints overlay. Colors can be specified as a name
+            like 'cyan' or afwDisplay.RED; as an rgb value such as
+            'rgb(80,100,220)'; or as rgb plus alpha (transparency) such
+            as 'rgba('74,144,226,0.60)'.
+        highlightColor : `str`
+            Color for highlighted footprints
+        selectColor : `str`
+            Color for selected footprints
+        style : {'fill', 'outline'}
+            Style of footprints display, filled or outline
+        insertColumn : `int`
+            Column at which to insert the "family_id" and "category" columns
+        layerString: `str`
+            Name of footprints layer string, to concatenate with the frame
+            Re-using the layer_string will overwrite the previous table and
+            footprints
+        titleString: `str`
+            Title of catalog, to concatenate with the frame
+        """
+        footprintTable = createFootprintsTable(catalog)
+        with tempfile.NamedTemporaryFile() as fd:
+            footprintTable.to_xml(fd.name)
+            tableval = self._client.upload_file(fd.name)
+        self._client.overlay_footprints(footprint_file=tableval,
+                                        title=titleString + str(self.display.frame),
+                                        footprint_layer_id=layerString + str(self.display.frame),
+                                        plot_id=str(self.display.frame),
+                                        color=color,
+                                        highlight_color=highlightColor,
+                                        select_color=selectColor,
+                                        style=style)
