@@ -23,6 +23,7 @@
 from __future__ import absolute_import, division, print_function
 from past.builtins import long
 
+from io import BytesIO
 from socket import gaierror
 import tempfile
 
@@ -541,9 +542,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             Title of catalog, to concatenate with the frame
         """
         footprintTable = createFootprintsTable(catalog)
-        with tempfile.NamedTemporaryFile() as fd:
-            footprintTable.to_xml(fd.name)
-            tableval = self._client.upload_file(fd.name)
+        with BytesIO() as fd:
+            footprintTable.to_xml(fd)
+            tableval = self._client.upload_data(fd, 'UNKNOWN')
         self._client.overlay_footprints(footprint_file=tableval,
                                         title=titleString + str(self.display.frame),
                                         footprint_layer_id=layerString + str(self.display.frame),
