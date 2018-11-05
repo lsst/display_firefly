@@ -166,13 +166,19 @@ def createFootprintsTable(catalog, xy0=None,
         spanList.append(scoords)
         peakList.append(pcoords)
 
-    for i, row in enumerate(inputVoTable.array):
-        startList = [row.item(0)[k] for k in range(len(row))]
-        startList.insert(insertColumn, familyList[i])
-        startList.insert(insertColumn+1, categoryList[i])
-        startList = startList + [spanList[i], peakList[i],
-                                 fpxll[i], fpyll[i], fpxur[i], fpyur[i]]
-        outTable.array[i] = tuple(startList)
+    # Copy the input data to the output
+    for f in inputVoTable.fields:
+        outTable.array[f.name] = inputVoTable.array[f.name]
+    # The numerical columns need to be reshaped
+    outTable.array['family_id'] = np.ma.MaskedArray(familyList).reshape((len(sourceTable),1))
+    # The object columns are not reshaped
+    outTable.array['category'] = np.ma.MaskedArray(categoryList)
+    outTable.array['spans'] = np.ma.MaskedArray(spanList)
+    outTable.array['peaks'] = np.ma.MaskedArray(peakList)
+    outTable.array['footprint_corner1_x'] = np.ma.MaskedArray(fpxll).reshape((len(sourceTable), 1))
+    outTable.array['footprint_corner1_y'] = np.ma.MaskedArray(fpyll).reshape((len(sourceTable), 1))
+    outTable.array['footprint_corner2_x'] = np.ma.MaskedArray(fpxur).reshape((len(sourceTable), 1))
+    outTable.array['footprint_corner2_y'] = np.ma.MaskedArray(fpyur).reshape((len(sourceTable), 1))
 
     outTable.infos.append(Info(name='contains_lsst_footprints', value='true'))
     outTable.infos.append(Info(name='contains_lsst_measurements', value='true'))
