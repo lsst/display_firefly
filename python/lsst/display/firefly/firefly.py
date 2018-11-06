@@ -550,6 +550,6 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                                         footprint_layer_id=layerString + str(self.display.frame),
                                         plot_id=str(self.display.frame),
                                         color=color,
-                                        highlight_color=highlightColor,
-                                        select_color=selectColor,
+                                        highlightColor=highlightColor,
+                                        selectColor=selectColor,
                                         style=style)
