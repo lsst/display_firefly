@@ -20,12 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from copy import deepcopy
-import tempfile
 
 import numpy as np
 from astropy.io.votable.tree import VOTableFile, Resource, Field, Info
 from astropy.io.votable import from_table
-from astropy.table import Table
 import astropy.units as u
 
 import lsst.afw.geom as afwGeom
@@ -62,8 +60,7 @@ def recordSelector(record, selection):
                            '"deblended children", "isolated"')
 
 
-def createFootprintsTable(catalog, xy0=None,
-                            insertColumn=4):
+def createFootprintsTable(catalog, xy0=None, insertColumn=4):
     """make a VOTable of SourceData table and footprints
 
     Parameters:
@@ -91,7 +88,7 @@ def createFootprintsTable(catalog, xy0=None,
     # Fix invalid unit strings of "seconds"
     # Ticket DM-16411 has been filed to fix this upstream
     for colName in ['modelfit_CModel_dev_time', 'modelfit_CModel_initial_time',
-                     'modelfit_CModel_exp_time']:
+                    'modelfit_CModel_exp_time']:
         if colName in sourceTable.colnames:
             sourceTable[colName].unit = u.s
 
@@ -104,6 +101,9 @@ def createFootprintsTable(catalog, xy0=None,
     inputVoFile = from_table(sourceTable)
     # Extract first (only) table
     inputVoTable = inputVoFile.get_first_table()
+    # delete the Astropy table after saving the columns
+    inputColumnNames = sourceTable.colnames
+    del sourceTable
     # Make a copy of the table, because adding columns will cause the data
     # to be destroyed, and we will have to copy the data back from the input
     outTable = deepcopy(inputVoTable)
@@ -113,9 +113,9 @@ def createFootprintsTable(catalog, xy0=None,
     voTableFile.resources.append(resource)
     resource.tables.append(outTable)
     outTable.fields.insert(insertColumn, Field(voTableFile, name='family_id',
-                                                datatype='long', arraysize='1'))
+                                               datatype='long', arraysize='1'))
     outTable.fields.insert(insertColumn+1, Field(voTableFile, name='category',
-                                                  datatype='unicodeChar', arraysize='*'))
+                                                 datatype='unicodeChar', arraysize='*'))
     outTable.fields.extend([
         Field(voTableFile, name="spans", datatype="int", arraysize="*"),
         Field(voTableFile, name="peaks", datatype="float", arraysize="*"),
@@ -124,8 +124,10 @@ def createFootprintsTable(catalog, xy0=None,
         Field(voTableFile, name='footprint_corner2_x', datatype="int", arraysize="1"),
         Field(voTableFile, name='footprint_corner2_y', datatype="int", arraysize="1")])
 
+    nRows = len(inputVoTable.array)
+
     # This next step destroys the existing data
-    outTable.create_arrays(nrows=len(sourceTable))
+    outTable.create_arrays(nrows=nRows)
 
     x0, y0 = xy0
     spanList = []
@@ -166,13 +168,19 @@ def createFootprintsTable(catalog, xy0=None,
         spanList.append(scoords)
         peakList.append(pcoords)
 
-    for i, row in enumerate(inputVoTable.array):
-        startList = [row.item(0)[k] for k in range(len(row))]
-        startList.insert(insertColumn, familyList[i])
-        startList.insert(insertColumn+1, categoryList[i])
-        startList = startList + [spanList[i], peakList[i],
-                                 fpxll[i], fpyll[i], fpxur[i], fpyur[i]]
-        outTable.array[i] = tuple(startList)
+    # Copy the input data to the output
+    for f in inputVoTable.fields:
+        outTable.array[f.name] = inputVoTable.array[f.name]
+    # The numerical columns need to be reshaped
+    outTable.array['family_id'] = np.ma.MaskedArray(familyList).reshape((nRows, 1))
+    # The object columns are not reshaped
+    outTable.array['category'] = np.ma.MaskedArray(categoryList)
+    outTable.array['spans'] = np.ma.MaskedArray(spanList)
+    outTable.array['peaks'] = np.ma.MaskedArray(peakList)
+    outTable.array['footprint_corner1_x'] = np.ma.MaskedArray(fpxll).reshape((nRows, 1))
+    outTable.array['footprint_corner1_y'] = np.ma.MaskedArray(fpyll).reshape((nRows, 1))
+    outTable.array['footprint_corner2_x'] = np.ma.MaskedArray(fpxur).reshape((nRows, 1))
+    outTable.array['footprint_corner2_y'] = np.ma.MaskedArray(fpyur).reshape((nRows, 1))
 
     outTable.infos.append(Info(name='contains_lsst_footprints', value='true'))
     outTable.infos.append(Info(name='contains_lsst_measurements', value='true'))
@@ -181,20 +189,20 @@ def createFootprintsTable(catalog, xy0=None,
                                'footprint_corner2_x;footprint_corner2_y;spans;peaks'))
     outTable.infos.append(Info(name='pixelsys', value='zero-based'))
     # Check whether the coordinates are included and are valid
-    if (('coord_ra' in sourceTable.colnames) and
-            ('coord_dec' in sourceTable.colnames) and
-            np.isfinite(sourceTable['coord_ra']).any() and
-            np.isfinite(sourceTable['coord_dec']).any()):
-        coord_column_string = 'coord_rafla;coord_dec;EQ_J2000'
-    elif (('base_SdssCentroid_x' in sourceTable.colnames) and
-            ('base_SdssCentroid_y' in sourceTable.colnames) and
-            np.isfinite(sourceTable['base_SdssCentroid_x']).any() and
-            np.isfinite(sourceTable['base_SdssCentroid_y']).any()):
+    if (('coord_ra' in inputColumnNames) and
+            ('coord_dec' in inputColumnNames) and
+            np.isfinite(outTable.array['coord_ra']).any() and
+            np.isfinite(outTable.array['coord_dec']).any()):
+        coord_column_string = 'coord_ra;coord_dec;EQ_J2000'
+    elif (('base_SdssCentroid_x' in inputColumnNames) and
+            ('base_SdssCentroid_y' in inputColumnNames) and
+            np.isfinite(outTable.array['base_SdssCentroid_x']).any() and
+            np.isfinite(outTable.array['base_SdssCentroid_y']).any()):
         coord_column_string = 'base_SdssCentroid_x;base_SdssCentroid_y;ZERO_BASED'
-    elif (('base_NaiveCentroid_x' in sourceTable.colnames) and
-            ('base_NaiveCentroid_y' in sourceTable.colnames) and
-            np.isfinite(sourceTable['base_NaiveCentroid_x']).any() and
-            np.isfinite(sourceTable['base_NaiveCentroid_y']).any()):
+    elif (('base_NaiveCentroid_x' in inputColumnNames) and
+            ('base_NaiveCentroid_y' in inputColumnNames) and
+            np.isfinite(outTable.array['base_NaiveCentroid_x']).any() and
+            np.isfinite(outTable.array['base_NaiveCentroid_y']).any()):
         coord_column_string = 'base_NaiveCentroid_x;base_NaiveCentroid_y;ZERO-BASED'
     else:
         raise RuntimeError('No valid coordinate columns in catalog')
