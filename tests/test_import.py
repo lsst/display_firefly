@@ -39,8 +39,7 @@ class InvalidHostTestCase1(lsst.utils.tests.TestCase):
 
     def testConnect(self):
         with self.assertRaises(ws4py.websocket.HandshakeError):
-            lsst.display.firefly.firefly_client.FireflyClient(
-                                    'http://google.com')
+            lsst.display.firefly.firefly_client.FireflyClient('http://google.com')
 
     def testMakeDisplay(self):
         with self.assertRaises(RuntimeError):

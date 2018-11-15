@@ -212,7 +212,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _buffer(self, enable=True):
         """!Enable or disable buffering of writes to the display
-        \param enable  True or False, as appropriate
+        param enable  True or False, as appropriate
         """
         self._isBuffered = enable
 
