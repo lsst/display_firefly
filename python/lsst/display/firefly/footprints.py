@@ -160,7 +160,12 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
                                'footprint_corner2_x;footprint_corner2_y;spans;peaks'))
     outTable.infos.append(Info(name='pixelsys', value='zero-based'))
     # Check whether the coordinates are included and are valid
-    if (('coord_ra' in inputColumnNames) and
+    if (('slot_Centroid_x' in inputColumnNames) and
+            ('slot_Centroid_y' in inputColumnNames) and
+            np.isfinite(outTable.array['slot_Centroid_x']).any() and
+            np.isfinite(outTable.array['slot_Centroid_y']).any()):
+        coord_column_string = 'slot_Centroid_x;slot_Centroid_y;ZERO_BASED'
+    elif (('coord_ra' in inputColumnNames) and
             ('coord_dec' in inputColumnNames) and
             np.isfinite(outTable.array['coord_ra']).any() and
             np.isfinite(outTable.array['coord_dec']).any()):
