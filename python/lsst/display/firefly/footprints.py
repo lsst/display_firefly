@@ -19,12 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from copy import deepcopy
-from io import BytesIO
 
 import numpy as np
-from astropy.io.votable.tree import VOTableFile, Resource, Field, Info
-from astropy.io.votable import from_table, parse
+from astropy.io.votable.tree import Info
+from astropy.io.votable import from_table
+from astropy.table import Column
 
 import lsst.afw.geom as afwGeom
 import lsst.afw.table as afwTable
@@ -90,43 +89,7 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
         if sourceTable[colName].dtype.num == 9:
             sourceTable[colName].dtype = np.dtype('long')
 
-    # Convert the astropy.table.Table to astropy.vo.voTableFile
-    inputVoFile = from_table(sourceTable)
-    # Extract first (only) table
-    inputVoTable = inputVoFile.get_first_table()
-    # delete the Astropy table after saving the columns
     inputColumnNames = sourceTable.colnames
-    del sourceTable
-    # Make a copy of the table, because adding columns will cause the data
-    # to be destroyed, and we will have to copy the data back from the input
-    outTable = deepcopy(inputVoTable)
-
-    voTableFile = VOTableFile()
-    resource = Resource()
-    voTableFile.resources.append(resource)
-
-    # Change datatype 'bit' to 'boolean' to work with current Firefly libs
-    for f in outTable.fields:
-        if f.datatype == 'bit':
-            f.datatype = 'boolean'
-
-    # Insert the new columns for footprints
-    outTable.fields.insert(insertColumn, Field(voTableFile, name='family_id',
-                                               datatype='long'))
-    outTable.fields.insert(insertColumn+1, Field(voTableFile, name='category',
-                                                 datatype='unicodeChar', arraysize='*'))
-    outTable.fields.extend([
-        Field(voTableFile, name="spans", datatype="int", arraysize="*"),
-        Field(voTableFile, name="peaks", datatype="float", arraysize="*"),
-        Field(voTableFile, name='footprint_corner1_x', datatype="int"),
-        Field(voTableFile, name='footprint_corner1_y', datatype="int"),
-        Field(voTableFile, name='footprint_corner2_x', datatype="int"),
-        Field(voTableFile, name='footprint_corner2_y', datatype="int")])
-
-    nRows = len(inputVoTable.array)
-
-    # This next step destroys the existing data
-    outTable.create_arrays(nrows=nRows)
 
     x0, y0 = xy0
     spanList = []
@@ -174,35 +137,21 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
         spanList.append(scoords)
         peakList.append(pcoords)
 
-    # Copy the input data to the output
-    for f in inputVoTable.fields:
-        outTable.array[f.name] = inputVoTable.array[f.name]
-    outTable.array['family_id'] = np.ma.MaskedArray(familyList)
-    outTable.array['category'] = np.ma.MaskedArray(categoryList)
-    outTable.array['spans'] = np.ma.MaskedArray(np.array(spanList))
-    outTable.array['peaks'] = np.ma.MaskedArray(np.array(peakList))
-    outTable.array['footprint_corner1_x'] = np.ma.MaskedArray(fpxll)
-    outTable.array['footprint_corner1_y'] = np.ma.MaskedArray(fpyll)
-    outTable.array['footprint_corner2_x'] = np.ma.MaskedArray(fpxur)
-    outTable.array['footprint_corner2_y'] = np.ma.MaskedArray(fpyur)
+    sourceTable.add_column(Column(np.array(familyList)),
+                           name='family_id',
+                           index=insertColumn)
+    sourceTable.add_column(Column(np.array(categoryList)),
+                           name='category',
+                           index=insertColumn+1)
+    sourceTable.add_column(Column(np.array(spanList)), name='spans')
+    sourceTable.add_column(Column(np.array(peakList)), name='peaks')
+    sourceTable.add_column(Column(np.array(fpxll)), name='footprint_corner1_x')
+    sourceTable.add_column(Column(np.array(fpyll)), name='footprint_corner1_y')
+    sourceTable.add_column(Column(np.array(fpxur)), name='footprint_corner2_x')
+    sourceTable.add_column(Column(np.array(fpyur)), name='footprint_corner2_y')
 
-    # This line needed for Astropy 3.0.3 but not later versions
-    outTable._config['version_1_3_or_later'] = True
-    outTable.format = 'tabledata'
-    resource.tables.append(outTable)
-    voTableFile.version = '1.3'
-    with BytesIO() as fd:
-        voTableFile.to_xml(fd)
-        intVo = parse(fd)
-
-    intVo.set_all_tables_format('binary2')
-
-    outTable = intVo.get_first_table()
-
-    cattable = outTable.to_table()
-    cut = cattable[:]
-    finalVo = from_table(cut)
-    outTable = finalVo.get_first_table()
+    outputVO = from_table(sourceTable)
+    outTable = outputVO.get_first_table()
 
     outTable.infos.append(Info(name='contains_lsst_footprints', value='true'))
     outTable.infos.append(Info(name='contains_lsst_measurements', value='true'))
@@ -236,6 +185,6 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
             f.datatype = 'boolean'
 
     outTable._config['version_1_3_or_later'] = True
-    finalVo.set_all_tables_format('binary2')
+    outputVO.set_all_tables_format('binary2')
 
-    return(finalVo)
+    return(outputVO)
