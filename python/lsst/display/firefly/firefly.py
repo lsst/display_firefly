@@ -448,6 +448,62 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
         if not localbrowser and not self.verbose:
             _fireflyClient.display_url()
+
+    def _setImageColormap(self, cmap):
+        """set the colormap
+
+        Parameters:
+        -----------
+        cmap : `str` or `int`
+            name of the colormap, or number.
+            Options:
+            'gray' or 0 : Gray Scale
+            'reversegray' or 1 : Reverse Gray Scale
+            'colorcube' or 2 : Color Cube
+            'spectrum' or 3 : Spectrum
+            'false' or 4 : For False Color
+            'reversefalse' or 5 : For False Color - Reverse
+            'falsecompressed' or 6 : For False Color - Compressed
+            'difference' or 7 : For difference images
+            'a-ds9' or 8 : ds9's a color bar
+            'b-ds9' or 9 : ds9's b color bar
+            'bb-ds9' or 10 : ds9's bb color bar
+            'he-ds9' or 11 : ds9's he color bar
+            'i8-ds9' or 12 : ds9's i8 color bar
+            'aips-ds9' or 13 : ds9's aips color bar
+            'sls-ds9' or 14 : ds9's sls color bar
+            'hsv-ds9' or 15 : ds9's hsv color bar
+            'heat-ds9' or 16 : Heat (ds9)
+            'cool-ds9' or 17 : Cool (ds9)
+            'rainbow-ds9' or 18 : Rainbow (ds9)
+            'standard-ds9' or 19 : Standard (ds9)
+            'staircase-ds9' or 20 : Staircase (ds9)
+            'color-ds9' or 21 : Color (ds9)
+        """
+        cbar_names = ['gray', 'reversegray', 'colorcube', 'spectrum', 'false',
+                      'reversefalse', 'falsecompressed', 'a-ds9', 'b-ds9', 'bb-ds9',
+                      'he-ds9', 'i8-ds9', 'aips-ds9', 'sls-ds9', 'hsv-ds9', 'heat-ds9',
+                      'heat-ds9', 'cool-ds9', 'rainbow-ds9', 'standard-ds9',
+                      'staircase-ds9', 'color-ds9']
+        max_cmap_int = len(cbar_names) - 1
+        cbar_int = None
+        try:
+            cbar_int = int(cmap)
+        except ValueError:
+            pass  # fallback to string name
+        try:
+            cbar_int = cbar_names.index(cmap)
+        except ValueError:
+            pass
+        if ((cbar_int is None) or (cbar_int < 0) or (cbar_int > max_cmap_int)):
+            raise RuntimeError('cmap must be an integer between 0 and {}'.format(max_cmap_int) +
+                               ' or a string in ' + ', '.join(cbar_names))
+        _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
+                                              action_type='ImagePlotCntlr.ColorChange',
+                                              payload={'plotId': str(self.display.frame),
+                                                       'cbarId': cbar_int,
+                                                       'doReplot': True})
+
     #
     # Zoom and Pan
     #
