@@ -19,12 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from copy import deepcopy
 
 import numpy as np
-from astropy.io.votable.tree import VOTableFile, Resource, Field, Info
+from astropy.io.votable.tree import Info
 from astropy.io.votable import from_table
-import astropy.units as u
+from astropy.table import Column
 
 import lsst.afw.geom as afwGeom
 import lsst.afw.table as afwTable
@@ -85,49 +84,12 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
     _catalog.extend(catalog, deep=True)
     sourceTable = _catalog.asAstropy()
 
-    # Fix invalid unit strings of "seconds"
-    # Ticket DM-16411 has been filed to fix this upstream
-    for colName in ['modelfit_CModel_dev_time', 'modelfit_CModel_initial_time',
-                    'modelfit_CModel_exp_time']:
-        if colName in sourceTable.colnames:
-            sourceTable[colName].unit = u.s
-
     # Change int64 dtypes so they convert to VOTable
     for colName in sourceTable.colnames:
         if sourceTable[colName].dtype.num == 9:
             sourceTable[colName].dtype = np.dtype('long')
 
-    # Convert the astropy.table.Table to astropy.vo.voTableFile
-    inputVoFile = from_table(sourceTable)
-    # Extract first (only) table
-    inputVoTable = inputVoFile.get_first_table()
-    # delete the Astropy table after saving the columns
     inputColumnNames = sourceTable.colnames
-    del sourceTable
-    # Make a copy of the table, because adding columns will cause the data
-    # to be destroyed, and we will have to copy the data back from the input
-    outTable = deepcopy(inputVoTable)
-
-    voTableFile = VOTableFile()
-    resource = Resource()
-    voTableFile.resources.append(resource)
-    resource.tables.append(outTable)
-    outTable.fields.insert(insertColumn, Field(voTableFile, name='family_id',
-                                               datatype='long', arraysize='1'))
-    outTable.fields.insert(insertColumn+1, Field(voTableFile, name='category',
-                                                 datatype='unicodeChar', arraysize='*'))
-    outTable.fields.extend([
-        Field(voTableFile, name="spans", datatype="int", arraysize="*"),
-        Field(voTableFile, name="peaks", datatype="float", arraysize="*"),
-        Field(voTableFile, name='footprint_corner1_x', datatype="int", arraysize="1"),
-        Field(voTableFile, name='footprint_corner1_y', datatype="int", arraysize="1"),
-        Field(voTableFile, name='footprint_corner2_x', datatype="int", arraysize="1"),
-        Field(voTableFile, name='footprint_corner2_y', datatype="int", arraysize="1")])
-
-    nRows = len(inputVoTable.array)
-
-    # This next step destroys the existing data
-    outTable.create_arrays(nrows=nRows)
 
     x0, y0 = xy0
     spanList = []
@@ -143,6 +105,9 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
         recordId = record.getId()
         spans = footprint.getSpans()
         scoords = [(s.getY()-y0, s.getX0()-x0, s.getX1()-x0) for s in spans]
+        scoords = np.array(scoords).flatten()
+        scoords = np.ma.MaskedArray(scoords, mask=np.zeros(len(scoords),
+                                                           dtype=np.bool))
         fpbbox = footprint.getBBox()
         corners = [(c.getX()-x0, c.getY()-y0) for c in fpbbox.getCorners()]
         fpxll.append(corners[0][0])
@@ -151,6 +116,10 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
         fpyur.append(corners[2][1])
         peaks = footprint.getPeaks()
         pcoords = [(p.getFx()-x0, p.getFy()-y0) for p in peaks]
+        pcoords = np.array(pcoords).flatten()
+        pcoords = np.ma.MaskedArray(pcoords, mask=np.zeros(len(pcoords),
+                                                           dtype=np.bool))
+        fpbbox = footprint.getBBox()
         parentId = record.getParent()
         nChild = record.get('deblend_nChild')
         if parentId == 0:
@@ -168,19 +137,21 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
         spanList.append(scoords)
         peakList.append(pcoords)
 
-    # Copy the input data to the output
-    for f in inputVoTable.fields:
-        outTable.array[f.name] = inputVoTable.array[f.name]
-    # The numerical columns need to be reshaped
-    outTable.array['family_id'] = np.ma.MaskedArray(familyList).reshape((nRows, 1))
-    # The object columns are not reshaped
-    outTable.array['category'] = np.ma.MaskedArray(categoryList)
-    outTable.array['spans'] = np.ma.MaskedArray(spanList)
-    outTable.array['peaks'] = np.ma.MaskedArray(peakList)
-    outTable.array['footprint_corner1_x'] = np.ma.MaskedArray(fpxll).reshape((nRows, 1))
-    outTable.array['footprint_corner1_y'] = np.ma.MaskedArray(fpyll).reshape((nRows, 1))
-    outTable.array['footprint_corner2_x'] = np.ma.MaskedArray(fpxur).reshape((nRows, 1))
-    outTable.array['footprint_corner2_y'] = np.ma.MaskedArray(fpyur).reshape((nRows, 1))
+    sourceTable.add_column(Column(np.array(familyList)),
+                           name='family_id',
+                           index=insertColumn)
+    sourceTable.add_column(Column(np.array(categoryList)),
+                           name='category',
+                           index=insertColumn+1)
+    sourceTable.add_column(Column(np.array(spanList)), name='spans')
+    sourceTable.add_column(Column(np.array(peakList)), name='peaks')
+    sourceTable.add_column(Column(np.array(fpxll)), name='footprint_corner1_x')
+    sourceTable.add_column(Column(np.array(fpyll)), name='footprint_corner1_y')
+    sourceTable.add_column(Column(np.array(fpxur)), name='footprint_corner2_x')
+    sourceTable.add_column(Column(np.array(fpyur)), name='footprint_corner2_y')
+
+    outputVO = from_table(sourceTable)
+    outTable = outputVO.get_first_table()
 
     outTable.infos.append(Info(name='contains_lsst_footprints', value='true'))
     outTable.infos.append(Info(name='contains_lsst_measurements', value='true'))
@@ -189,7 +160,12 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
                                'footprint_corner2_x;footprint_corner2_y;spans;peaks'))
     outTable.infos.append(Info(name='pixelsys', value='zero-based'))
     # Check whether the coordinates are included and are valid
-    if (('coord_ra' in inputColumnNames) and
+    if (('slot_Centroid_x' in inputColumnNames) and
+            ('slot_Centroid_y' in inputColumnNames) and
+            np.isfinite(outTable.array['slot_Centroid_x']).any() and
+            np.isfinite(outTable.array['slot_Centroid_y']).any()):
+        coord_column_string = 'slot_Centroid_x;slot_Centroid_y;ZERO_BASED'
+    elif (('coord_ra' in inputColumnNames) and
             ('coord_dec' in inputColumnNames) and
             np.isfinite(outTable.array['coord_ra']).any() and
             np.isfinite(outTable.array['coord_dec']).any()):
@@ -209,6 +185,11 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
     outTable.infos.append(Info(name='CatalogCoordColumns',
                                value=coord_column_string))
 
-    outTable.format = 'tabledata'
+    for f in outTable.fields:
+        if f.datatype == 'bit':
+            f.datatype = 'boolean'
 
-    return(voTableFile)
+    outTable._config['version_1_3_or_later'] = True
+    outputVO.set_all_tables_format('binary2')
+
+    return(outputVO)
