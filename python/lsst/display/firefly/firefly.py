@@ -85,11 +85,25 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             import os
+            start_tab = None
             if ('html_file' not in kwargs) and ('FIREFLY_HTML' not in os.environ):
                 kwargs['html_file'] = 'slate.html'
+            if url is None:
+                if (('fireflyLabExtension' in os.environ) and
+                        ('fireflyURLLab' in os.environ)):
+                    url = os.environ['fireflyURLLab']
+                    start_tab = kwargs.get('start_tab', True)
+                    start_browser_tab = kwargs.get('start_browser_tab', False)
+                    if (name is None) and ('fireflyChannelLab' in os.environ):
+                        name = os.environ['fireflyChannelLab']
+                elif 'FIREFLY_URL' in os.environ:
+                    url = os.environ['FIREFLY_URL']
+                else:
+                    raise RuntimeError('Cannot determine url from environment; you must pass url')
             try:
-                if url is None:
-                    _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
+                if start_tab:
+                    _fireflyClient = firefly_client.FireflyClient.make_lab_client(
+                        start_tab=True, start_browser_tab=start_browser_tab)
                 else:
                     _fireflyClient = firefly_client.FireflyClient(url,
                                                                   channel=name, **kwargs)
@@ -132,9 +146,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _clearImage(self):
         """Delete the current image in the Firefly viewer
         """
-        self._client.dispatch_remote_action(channel=self._client.channel,
-                                            action_type='ImagePlotCntlr.deletePlotView',
-                                            payload=dict(plotId=str(self.display.frame)))
+        self._client.dispatch(action_type='ImagePlotCntlr.deletePlotView',
+                              payload=dict(plotId=str(self.display.frame)))
 
     def _mtv(self, image, mask=None, wcs=None, title=""):
         """Display an Image and/or Mask on a Firefly display
@@ -416,12 +429,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             masklist = set(self._maskIds + list(self.display._defaultMaskPlaneColor.keys()))
         for k in masklist:
             self._maskTransparencies[k] = transparency
-            _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
-                                                  action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
-                                                  payload={'plotId': str(self.display.frame),
-                                                           'imageOverlayId': k,
-                                                           'attributes': {'opacity': 1.0 - transparency/100.},
-                                                           'doReplot': False})
+            _fireflyClient.dispatch(action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
+                                    payload={'plotId': str(self.display.frame),
+                                             'imageOverlayId': k,
+                                             'attributes': {'opacity': 1.0 - transparency/100.},
+                                             'doReplot': False})
 
     def _getMaskTransparency(self, maskName):
         """Return the current mask's transparency"""
