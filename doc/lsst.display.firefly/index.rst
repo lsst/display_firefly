@@ -239,7 +239,7 @@ port 8080:
 
 .. code-block:: shell
 
-    docker run -p 8080:8080 -e "MAX_JVM_SIZE=8G" --rm ipac/firefly
+    docker run -p 8080:8080 -e "MAX_JVM_SIZE=8G" --rm ipac/firefly:lsst-dev
 
 In this case, the URL for Firefly will be `http://localhost:8080/firefly`.
 
@@ -248,7 +248,7 @@ to a file:
 
 .. code-block:: shell
 
-    docker run -p 8090:8080  -e "MAX_JVM_SIZE=8G" --rm ipac/firefly >& my.log &
+    docker run -p 8090:8080  -e "MAX_JVM_SIZE=8G" --rm ipac/firefly:lsst-dev >& my.log &
 
 Useful Docker commands may be found `in this cheat sheet <https://github.com/wsargent/docker-cheat-sheet>`_.
 
