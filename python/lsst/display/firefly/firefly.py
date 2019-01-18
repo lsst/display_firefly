@@ -86,8 +86,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if not _fireflyClient:
             import os
             start_tab = None
-            if ('html_file' not in kwargs) and ('FIREFLY_HTML' not in os.environ):
-                kwargs['html_file'] = 'slate.html'
+            html_file = kwargs.get('html_file',
+                                   os.environ.get('FIREFLY_HTML', 'slate.html'))
             if url is None:
                 if (('fireflyLabExtension' in os.environ) and
                         ('fireflyURLLab' in os.environ)):
@@ -102,20 +102,20 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                     raise RuntimeError('Cannot determine url from environment; you must pass url')
             try:
                 if start_tab:
+                    if verbose:
+                        print('Starting Jupyterlab client')
                     _fireflyClient = firefly_client.FireflyClient.make_lab_client(
-                        start_tab=True, start_browser_tab=start_browser_tab)
+                        start_tab=True, start_browser_tab=start_browser_tab,
+                        html_file=kwargs.get('html_file'), verbose=verbose)
                 else:
-                    _fireflyClient = firefly_client.FireflyClient(url,
-                                                                  channel=name, **kwargs)
+                    if verbose:
+                        print('Starting vanilla client')
+                    _fireflyClient = firefly_client.FireflyClient.make_client(
+                        url=url, html_file=html_file, launch_browser=True,
+                        channel_override=name, verbose=verbose)
             except (HandshakeError, gaierror) as e:
                 raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
 
-            global localbrowser
-            localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
-            if not localbrowser and not self.verbose:
-                _fireflyClient.display_url()
-            if self.verbose:
-                print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
@@ -131,7 +131,6 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._client = _fireflyClient
         self._channel = _fireflyClient.channel
         self._url = _fireflyClient.get_firefly_url()
-        self._localbrowser = localbrowser
         self._maskIds = []
         self._maskDict = {}
         self._maskPlaneColors = {}
@@ -457,9 +456,15 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
-        if not localbrowser and not self.verbose:
-            _fireflyClient.display_url()
+        if self._client.render_tree_id is not None:
+            # we are using Jupyterlab
+            self._client.dispatch(self._client.ACTION_DICT['StartLabWindow'],
+                                  {})
+        else:
+            localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
+            if not localbrowser and not self.verbose:
+                _fireflyClient.display_url()
+
     #
     # Zoom and Pan
     #
