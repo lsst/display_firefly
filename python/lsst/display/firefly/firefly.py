@@ -85,23 +85,37 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         global _fireflyClient
         if not _fireflyClient:
             import os
-            if ('html_file' not in kwargs) and ('FIREFLY_HTML' not in os.environ):
-                kwargs['html_file'] = 'slate.html'
-            try:
-                if url is None:
-                    _fireflyClient = firefly_client.FireflyClient(channel=name, **kwargs)
+            start_tab = None
+            html_file = kwargs.get('html_file',
+                                   os.environ.get('FIREFLY_HTML', 'slate.html'))
+            if url is None:
+                if (('fireflyLabExtension' in os.environ) and
+                        ('fireflyURLLab' in os.environ)):
+                    url = os.environ['fireflyURLLab']
+                    start_tab = kwargs.get('start_tab', True)
+                    start_browser_tab = kwargs.get('start_browser_tab', False)
+                    if (name is None) and ('fireflyChannelLab' in os.environ):
+                        name = os.environ['fireflyChannelLab']
+                elif 'FIREFLY_URL' in os.environ:
+                    url = os.environ['FIREFLY_URL']
                 else:
-                    _fireflyClient = firefly_client.FireflyClient(url,
-                                                                  channel=name, **kwargs)
+                    raise RuntimeError('Cannot determine url from environment; you must pass url')
+            try:
+                if start_tab:
+                    if verbose:
+                        print('Starting Jupyterlab client')
+                    _fireflyClient = firefly_client.FireflyClient.make_lab_client(
+                        start_tab=True, start_browser_tab=start_browser_tab,
+                        html_file=kwargs.get('html_file'), verbose=verbose)
+                else:
+                    if verbose:
+                        print('Starting vanilla client')
+                    _fireflyClient = firefly_client.FireflyClient.make_client(
+                        url=url, html_file=html_file, launch_browser=True,
+                        channel_override=name, verbose=verbose)
             except (HandshakeError, gaierror) as e:
                 raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
 
-            global localbrowser
-            localbrowser, browser_url = _fireflyClient.launch_browser(verbose=self.verbose)
-            if not localbrowser and not self.verbose:
-                _fireflyClient.display_url()
-            if self.verbose:
-                print('localbrowser: ', localbrowser, '   browser_url: ', browser_url)
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
@@ -117,7 +131,6 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._client = _fireflyClient
         self._channel = _fireflyClient.channel
         self._url = _fireflyClient.get_firefly_url()
-        self._localbrowser = localbrowser
         self._maskIds = []
         self._maskDict = {}
         self._maskPlaneColors = {}
@@ -132,9 +145,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _clearImage(self):
         """Delete the current image in the Firefly viewer
         """
-        self._client.dispatch_remote_action(channel=self._client.channel,
-                                            action_type='ImagePlotCntlr.deletePlotView',
-                                            payload=dict(plotId=str(self.display.frame)))
+        self._client.dispatch(action_type='ImagePlotCntlr.deletePlotView',
+                              payload=dict(plotId=str(self.display.frame)))
 
     def _mtv(self, image, mask=None, wcs=None, title=""):
         """Display an Image and/or Mask on a Firefly display
@@ -416,12 +428,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             masklist = set(self._maskIds + list(self.display._defaultMaskPlaneColor.keys()))
         for k in masklist:
             self._maskTransparencies[k] = transparency
-            _fireflyClient.dispatch_remote_action(channel=_fireflyClient.channel,
-                                                  action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
-                                                  payload={'plotId': str(self.display.frame),
-                                                           'imageOverlayId': k,
-                                                           'attributes': {'opacity': 1.0 - transparency/100.},
-                                                           'doReplot': False})
+            _fireflyClient.dispatch(action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
+                                    payload={'plotId': str(self.display.frame),
+                                             'imageOverlayId': k,
+                                             'attributes': {'opacity': 1.0 - transparency/100.},
+                                             'doReplot': False})
 
     def _getMaskTransparency(self, maskName):
         """Return the current mask's transparency"""
@@ -445,9 +456,15 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
     def _show(self):
         """Show the requested window"""
-        localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
-        if not localbrowser and not self.verbose:
-            _fireflyClient.display_url()
+        if self._client.render_tree_id is not None:
+            # we are using Jupyterlab
+            self._client.dispatch(self._client.ACTION_DICT['StartLabWindow'],
+                                  {})
+        else:
+            localbrowser, url = _fireflyClient.launch_browser(verbose=self.verbose)
+            if not localbrowser and not self.verbose:
+                _fireflyClient.display_url()
+
     #
     # Zoom and Pan
     #

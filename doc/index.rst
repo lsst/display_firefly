@@ -1,6 +1,6 @@
-#####################################
-display_firefly documentation preview
-#####################################
+##########################################
+lsst.display.firefly documentation preview
+##########################################
 
 .. This page is for local development only. It isn't published to pipelines.lsst.io.
 
@@ -9,5 +9,4 @@ display_firefly documentation preview
 .. toctree::
    :maxdepth: 1
 
-   display_firefly/index
    lsst.display.firefly/index
