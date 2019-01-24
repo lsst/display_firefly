@@ -38,11 +38,11 @@ class InvalidHostTestCase1(lsst.utils.tests.TestCase):
     """Test for invalid host (not a Firefly server)"""
 
     def testConnect(self):
-        with self.assertRaises(ws4py.websocket.HandshakeError):
+        with self.assertRaises(ValueError):
             lsst.display.firefly.firefly_client.FireflyClient('http://google.com')
 
     def testMakeDisplay(self):
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ValueError):
             afw_display.Display(backend='firefly',
                                 url='http://google.com')
 
