@@ -31,7 +31,6 @@ import unittest
 import lsst.utils.tests
 import lsst.display.firefly
 import lsst.afw.display as afw_display
-import ws4py
 
 
 class InvalidHostTestCase1(lsst.utils.tests.TestCase):
