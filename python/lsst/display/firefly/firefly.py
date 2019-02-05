@@ -403,7 +403,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             raise FireflyError('Interval method %s is invalid' % interval_type)
 
         rval = {}
-        if interval_type is not 'zscale':
+        if interval_type != 'zscale':
             rval = _fireflyClient.set_stretch(str(self.display.frame), stype=interval_type,
                                               algorithm=algorithm, lower_value=min,
                                               upper_value=max, **kwargs)
