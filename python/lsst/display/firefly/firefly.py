@@ -164,10 +164,15 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 fd.seek(0, 0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
+            try:
+                viewer_id = ('image-' + str(_fireflyClient.render_tree_id) + '-' +
+                             str(self.frame))
+            except AttributeError:
+                viewer_id = 'image-' + str(self.frame)
             extraParams = dict(Title=title,
                                MultiImageIdx=0,
                                PredefinedOverlayIds=' ',
-                               viewer_id='image-' + str(self.frame))
+                               viewer_id=viewer_id)
             # Firefly's Javascript API requires a space for parameters;
             # otherwise the parameter will be ignored
 
