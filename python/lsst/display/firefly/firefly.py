@@ -164,10 +164,15 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 fd.seek(0, 0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
+            try:
+                viewer_id = ('image-' + str(_fireflyClient.render_tree_id) + '-' +
+                             str(self.frame))
+            except AttributeError:
+                viewer_id = 'image-' + str(self.frame)
             extraParams = dict(Title=title,
                                MultiImageIdx=0,
                                PredefinedOverlayIds=' ',
-                               viewer_id='image-' + str(self.frame))
+                               viewer_id=viewer_id)
             # Firefly's Javascript API requires a space for parameters;
             # otherwise the parameter will be ignored
 
@@ -517,12 +522,25 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         plot area in upper right, and plots stretch across the bottom
         """
         self.clearViewer()
+        try:
+            tables_cell_id = 'tables-' + str(_fireflyClient.render_tree_id)
+        except AttributeError:
+            tables_cell_id = 'tables'
         self._client.add_cell(row=2, col=0, width=4, height=2, element_type='tables',
-                              cell_id='tables')
+                              cell_id=tables_cell_id)
+        try:
+            image_cell_id = ('image-' + str(_fireflyClient.render_tree_id) + '-' +
+                             str(self.frame))
+        except AttributeError:
+            image_cell_id = 'image-' + str(self.frame)
         self._client.add_cell(row=0, col=0, width=2, height=3, element_type='images',
-                              cell_id='image-%s' % str(self.display.frame))
+                              cell_id=image_cell_id)
+        try:
+            plots_cell_id = 'plots-' + str(_fireflyClient.render_tree_id)
+        except AttributeError:
+            plots_cell_id = 'plots'
         self._client.add_cell(row=0, col=2, width=2, height=3, element_type='xyPlots',
-                              cell_id='plots')
+                              cell_id=plots_cell_id)
 
     def overlayFootprints(self, catalog, color='rgba(74,144,226,0.60)',
                           highlightColor='cyan', selectColor='orange',
