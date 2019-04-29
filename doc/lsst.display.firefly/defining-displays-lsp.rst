@@ -59,7 +59,7 @@ This command is specific to the Firefly backend of the afwDisplay framework.
 Defining a Display to open a browser tab
 ========================================
 
-The first time that a Display object is instantiated in your Python or noteook
+The first time that a Display object is instantiated in your Python or notebook
 session, you can specify that a browser tab be opened. You will need to allow
 pop-ups for the science platform site.
 
@@ -83,6 +83,15 @@ a clickable link to the Firefly viewer.
 Click on the link to bring up a browser tab or window. Your browser or system
 settings determine whether the link brings up a tab, or a window.
 
+
+Authorizing a Display
+=====================
+
+When working inside the LSST Science Platform with default settings,
+authorization of the connection to the Firefly server will be handled
+automatically. If you encounter a need to pass a token for authorization,
+you can pass it to the first Display instance you create, with
+the ``token=`` keyword parameter.
 
 Embedding the Firefly viewer in a notebook
 ==========================================
