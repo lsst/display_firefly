@@ -6,7 +6,8 @@ Viewing LSST Source Detection Footprints
 The Firefly backend for ``lsst.afw.display`` includes specialized functions
 for overlaying and interacting with LSST Source Detection Footprints.
 
-Here is an example using HSC-reprocessed data.
+Here is an example using HSC-reprocessed data. When using the LSST Science
+Platform, a "medium" or larger container size is recommended.
 
 Define a Butler instance and an identifier for retrieving the data.
 
