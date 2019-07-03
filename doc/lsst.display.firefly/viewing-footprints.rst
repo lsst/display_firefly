@@ -6,14 +6,15 @@ Viewing LSST Source Detection Footprints
 The Firefly backend for ``lsst.afw.display`` includes specialized functions
 for overlaying and interacting with LSST Source Detection Footprints.
 
-Here is an example using HSC-reprocessed data.
+Here is an example using HSC-reprocessed data. When using the LSST Science
+Platform, a "medium" or larger container size is recommended.
 
 Define a Butler instance and an identifier for retrieving the data.
 
 .. code-block:: py
 
     from lsst.daf.persistence import Butler
-    butler = Butler('/datasets/hsc/repo/rerun/RC/w_2018_38/DM-15690/')
+    butler = Butler('/datasets/hsc/repo/rerun/RC/w_2019_22/DM-19244/')
     dataId = dict(filter='HSC-R', tract=9813, patch='4,4')
 
 Define bounding boxes for two regions of interest, one for the catalog and
