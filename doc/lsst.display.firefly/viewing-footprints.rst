@@ -23,11 +23,11 @@ the coadd image.
 
 .. code-block:: py
 
-    import lsst.afw.geom as afwGeom
-    footprintsBbox = afwGeom.Box2I(corner=afwGeom.Point2I(16900, 18700),
-                                   dimensions=afwGeom.Extent2I(600,600))
-    imageBbox = afwGeom.Box2I(corner=afwGeom.Point2I(16800, 18600),
-                              dimensions=afwGeom.Extent2I(800,800))
+    import lsst.geom as geom
+    footprintsBbox = geom.Box2I(corner=geom.Point2I(16900, 18700),
+                                dimensions=geom.Extent2I(600,600))
+    imageBbox = geom.Box2I(corner=geom.Point2I(16800, 18600),
+                           dimensions=geom.Extent2I(800,800))
     calexp = butler.get('deepCoadd_calexp_sub', dataId=dataId, bbox=imageBbox)
 
 Retrieve the entire catalog and then select only those records with pixel
@@ -37,7 +37,7 @@ locations inside the footprints bounding box.
 
     measCat = butler.get('deepCoadd_meas', dataId=dataId)
     import numpy as np
-    catSelect = np.array([footprintsBbox.contains(afwGeom.Point2I(r.getX(), r.getY()))
+    catSelect = np.array([footprintsBbox.contains(geom.Point2I(r.getX(), r.getY()))
                        for r in measCat])
     catalogSubset = measCat.subset(catSelect)
 
@@ -66,4 +66,3 @@ or as rgb plus alpha (opacity) such as "rgba(74,144,226,0.60)".
 The `layerString` and `titleString` are concatenated with the frame, to make the
 footprint drawing layer name and the table title, respectively. If multiple
 footprint layers are desired, be sure to use different values of `layerString`.
-

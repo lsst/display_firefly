@@ -25,7 +25,7 @@ from astropy.io.votable.tree import Info
 from astropy.io.votable import from_table
 from astropy.table import Column
 
-import lsst.afw.geom as afwGeom
+import lsst.geom as geom
 import lsst.afw.table as afwTable
 
 
@@ -78,7 +78,7 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
         VOTable object to upload to Firefly
     """
     if xy0 is None:
-        xy0 = afwGeom.Point2I(0, 0)
+        xy0 = geom.Point2I(0, 0)
 
     _catalog = afwTable.SourceCatalog(catalog.table.clone())
     _catalog.extend(catalog, deep=True)
