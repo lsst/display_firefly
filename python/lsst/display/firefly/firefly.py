@@ -100,19 +100,27 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                     url = os.environ['FIREFLY_URL']
                 else:
                     raise RuntimeError('Cannot determine url from environment; you must pass url')
+
+            token = kwargs.get('token',
+                               os.environ.get('ACCESS_TOKEN', None))
+
             try:
                 if start_tab:
                     if verbose:
                         print('Starting Jupyterlab client')
                     _fireflyClient = firefly_client.FireflyClient.make_lab_client(
                         start_tab=True, start_browser_tab=start_browser_tab,
-                        html_file=kwargs.get('html_file'), verbose=verbose)
+                        html_file=kwargs.get('html_file'), verbose=verbose,
+                        token=token)
+
                 else:
                     if verbose:
                         print('Starting vanilla client')
                     _fireflyClient = firefly_client.FireflyClient.make_client(
                         url=url, html_file=html_file, launch_browser=True,
-                        channel_override=name, verbose=verbose)
+                        channel_override=name, verbose=verbose,
+                        token=token)
+
             except (HandshakeError, gaierror) as e:
                 raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
 
