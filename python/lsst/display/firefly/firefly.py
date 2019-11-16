@@ -20,9 +20,6 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
-from __future__ import absolute_import, division, print_function
-from past.builtins import long
-
 from io import BytesIO
 from socket import gaierror
 import tempfile
@@ -212,7 +209,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             for k, v in maskPlaneDict.items():
                 self._maskDict[k] = v
                 self._maskPlaneColors[k] = self.display.getMaskPlaneColor(k)
-            usedPlanes = long(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
+            usedPlanes = int(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
             for k in self._maskDict:
                 if (((1 << self._maskDict[k]) & usedPlanes) and
                         (k in self._maskPlaneColors) and
