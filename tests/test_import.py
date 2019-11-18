@@ -24,7 +24,6 @@
 
 Note that interactive user tests are in afw/tests/test_display.py
 """
-from __future__ import absolute_import, division, print_function
 
 import unittest
 
