@@ -29,23 +29,16 @@ import unittest
 
 import lsst.utils.tests
 import lsst.display.firefly
-import lsst.afw.display as afw_display
 
 
-class InvalidHostTestCase1(lsst.utils.tests.TestCase):
-    """Test for invalid host (not a Firefly server)"""
+class ImportTest(unittest.TestCase):
+    """Trivial test for a successful import"""
 
-    def testConnect(self):
-        with self.assertRaises(ValueError):
-            lsst.display.firefly.firefly_client.FireflyClient('http://google.com')
-
-    def testMakeDisplay(self):
-        with self.assertRaises(ValueError):
-            afw_display.Display(backend='firefly',
-                                url='http://google.com')
+    def testImport(self):
+        self.assertTrue(hasattr(lsst.display.firefly, "FireflyError"))
 
 
-class MemoryTester(lsst.utils.tests.MemoryTestCase):
+class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass
 
 

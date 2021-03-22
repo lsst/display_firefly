@@ -1,6 +1,5 @@
 setupRequired(afw)
 setupRequired(geom)
 setupRequired(log)
-setupRequired(firefly_client)
 
 envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
