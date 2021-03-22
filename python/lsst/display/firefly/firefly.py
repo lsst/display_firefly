@@ -27,7 +27,7 @@ import tempfile
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
 import lsst.afw.display.ds9Regions as ds9Regions
-import lsst.afw.display.displayLib as displayLib
+import lsst.afw.display as afwDisplay
 import lsst.afw.math as afwMath
 import lsst.log
 
@@ -164,7 +164,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             self._erase()
 
             with tempfile.NamedTemporaryFile() as fd:
-                displayLib.writeFitsImage(fd.name, image, wcs, title)
+                afwDisplay.writeFitsImage(fd.name, image, wcs, title)
                 fd.flush()
                 fd.seek(0, 0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
@@ -200,7 +200,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if self.verbose:
                 print('displaying mask')
             with tempfile.NamedTemporaryFile() as fdm:
-                displayLib.writeFitsImage(fdm.name, mask, wcs, title)
+                afwDisplay.writeFitsImage(fdm.name, mask, wcs, title)
                 fdm.flush()
                 fdm.seek(0, 0)
                 self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
