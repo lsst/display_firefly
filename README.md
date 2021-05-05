@@ -41,6 +41,6 @@ display for use with the back-end-agnostic `afw.display` interface:
 
 ```
 import lsst.afw.display as afwDisplay
-afwDisplay.setDefaultBackend(‘firefly’)
+afwDisplay.setDefaultBackend('firefly')
 afw_display = afwDisplay.Display(frame=1)
 ```
