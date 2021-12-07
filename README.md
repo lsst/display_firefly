@@ -6,7 +6,7 @@ Firefly is IPAC's toolkit for construction of astronomical data user interfaces.
 
 ## Pointers to more information
 
-* Full documentation is available at https://display-firefly.lsst.io/ .
+* Full documentation is available at https://pipelines.lsst.io/modules/lsst.display.firefly/ .
 * Within the Rubin Science Platform environment, suitable Firefly servers
   are provided by default, so that in many cases the user need not be aware
   of the identity or URL of the server.
@@ -35,12 +35,12 @@ managed via Conda and supplied via the `rubin-env` mechanism.
 ## Usage
 
 Usage is described in detail in 
-the [documentation](https://display-firefly.lsst.io/).
+the [documentation](https://pipelines.lsst.io/modules/lsst.display.firefly/).
 However, in many cases the following is sufficient to set up a Firefly
 display for use with the back-end-agnostic `afw.display` interface:
 
 ```
 import lsst.afw.display as afwDisplay
-afwDisplay.setDefaultBackend(‘firefly’)
+afwDisplay.setDefaultBackend('firefly')
 afw_display = afwDisplay.Display(frame=1)
 ```
