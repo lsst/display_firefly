@@ -13,9 +13,9 @@ Define a Butler instance and an identifier for retrieving the data.
 
 .. code-block:: py
 
-    from lsst.daf.persistence import Butler
-    butler = Butler('/datasets/hsc/repo/rerun/RC/w_2019_22/DM-19244/')
-    dataId = dict(filter='HSC-R', tract=9813, patch='4,4')
+    from lsst.daf.butler import Butler
+    butler = Butler('/datasets/hsc/repo/', collections='rerun/RC/w_2019_22/DM-19244/')
+    dataId = dict(pysical_filter='HSC-R', tract=9813, patch=32)
 
 Define bounding boxes for two regions of interest, one for the catalog and
 a somewhat larger one for the image. Use these to retrieve a cutout of
@@ -28,7 +28,7 @@ the coadd image.
                                 dimensions=geom.Extent2I(600,600))
     imageBbox = geom.Box2I(corner=geom.Point2I(16800, 18600),
                            dimensions=geom.Extent2I(800,800))
-    calexp = butler.get('deepCoadd_calexp_sub', dataId=dataId, bbox=imageBbox)
+    calexp = butler.get('deepCoadd_calexp', dataId=dataId, parameters={'bbox'=imageBbox})
 
 Retrieve the entire catalog and then select only those records with pixel
 locations inside the footprints bounding box.

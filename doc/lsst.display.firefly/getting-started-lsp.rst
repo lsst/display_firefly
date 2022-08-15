@@ -34,9 +34,9 @@ Retrieve a simulated LSST image.
 .. code-block:: py
     :name: getting-started-getimage
 
-    from lsst.daf.persistence import Butler
-    butler = Butler('/project/shared/data/Twinkles_subset/output_data_v2')
-    dataId = {'filter': 'r', 'raft': '2,2', 'sensor': '1,1', 'visit': 235}
+    from lsst.daf.butler import Butler
+    butler = Butler('/repo/main', collectiions='output_data_v2')
+    dataId = {'physical_filter': 'r', 'raft': 'R01', 'name_in_raft': 'S01', 'visit': 235}
     calexp = butler.get('calexp', **dataId)
 
 Set the scaling and mask transparency, and display the image.
@@ -73,5 +73,3 @@ Erase the regions while leaving the image and masks displayed.
     :name: getting-started-erase
 
     display1.erase()
-
-
