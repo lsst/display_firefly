@@ -192,4 +192,4 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
     outTable._config['version_1_3_or_later'] = True
     outputVO.set_all_tables_format('binary2')
 
-    return(outputVO)
+    return outputVO

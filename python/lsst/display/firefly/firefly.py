@@ -49,7 +49,7 @@ class FireflyError(Exception):
 
 def firefly_version():
     """Return the version of firefly_client in use, as a string"""
-    return(firefly_client.__version__)
+    return firefly_client.__version__
 
 
 class DisplayImpl(virtualDevice.DisplayImpl):
