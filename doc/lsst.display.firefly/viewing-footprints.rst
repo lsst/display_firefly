@@ -50,7 +50,7 @@ Set up the Firefly display and display the image.
     display1.setMaskTransparency(80)
     display1.scale('asinh', 10, 80, unit='percent', Q=6)
     display1.resetLayout()
-    display1.mtv(calexp)
+    display1.image(calexp)
 
 Overlay the footprints and show the accompanying table. Colors can be specified as
 a name like "cyan" or "afwDisplay.RED"; as an rgb value such as "rgb(80,100,220";

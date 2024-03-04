@@ -10,19 +10,19 @@ Displaying an image
 Default display of an Exposure object
 -------------------------------------
 
-The :meth:`mtv` method of your display is used to display Exposures,
+The :meth:`image` method of your display is used to display Exposures,
 MaskedImages and Images from the stack. Assuming that your session
 includes an Exposure named ``calexp``:
 
 .. code-block:: py
-    :name: display-mtv
+    :name: display-image
 
-    display1.mtv(calexp)
+    display1.image(calexp)
 
 Mask display and manipulation
 -----------------------------
 
-If the data object passed to :meth:`mtv` contains masks, these will
+If the data object passed to :meth:`image` contains masks, these will
 automatically be overlaid on the image. A layer control icon at the
 top of the browser window can be used to turn mask layers on and off.
 
@@ -36,7 +36,7 @@ the image is displayed, while the transparency may be changed at any time.
 
     display1.setMaskPlaneColor('DETECTED', afwDisplay.GREEN)
     display1.setMaskTransparency(30)
-    display1.mtv(calexp)
+    display1.image(calexp)
 
 Rescale or restretch the image pixels display
 ---------------------------------------------
