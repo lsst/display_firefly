@@ -175,11 +175,6 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
             np.isfinite(outTable.array['base_SdssCentroid_x']).any() and
             np.isfinite(outTable.array['base_SdssCentroid_y']).any()):
         coord_column_string = 'base_SdssCentroid_x;base_SdssCentroid_y;ZERO_BASED'
-    elif (('base_NaiveCentroid_x' in inputColumnNames) and
-            ('base_NaiveCentroid_y' in inputColumnNames) and
-            np.isfinite(outTable.array['base_NaiveCentroid_x']).any() and
-            np.isfinite(outTable.array['base_NaiveCentroid_y']).any()):
-        coord_column_string = 'base_NaiveCentroid_x;base_NaiveCentroid_y;ZERO-BASED'
     else:
         raise RuntimeError('No valid coordinate columns in catalog')
     outTable.infos.append(Info(name='CatalogCoordColumns',
