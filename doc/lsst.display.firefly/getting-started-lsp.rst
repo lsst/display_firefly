@@ -46,7 +46,7 @@ Set the scaling and mask transparency, and display the image.
 
     display1.scale("asinh", "zscale")
     display1.setMaskTransparency(90)
-    display1.mtv(calexp)
+    display1.image(calexp)
 
 Overlay symbols from a catalog
 ==============================
