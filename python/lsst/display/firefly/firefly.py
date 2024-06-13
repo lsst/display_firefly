@@ -84,7 +84,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             import os
             start_tab = None
             html_file = kwargs.get('html_file',
-                                   os.environ.get('FIREFLY_HTML', 'slate.html'))
+                                   os.environ.get('FIREFLY_HTML', ''))
             if url is None:
                 if (('fireflyLabExtension' in os.environ) and
                         ('fireflyURLLab' in os.environ)):
