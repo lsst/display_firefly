@@ -107,7 +107,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                         print('Starting Jupyterlab client')
                     _fireflyClient = firefly_client.FireflyClient.make_lab_client(
                         start_tab=True, start_browser_tab=start_browser_tab,
-                        html_file=kwargs.get('html_file'), verbose=verbose,
+                        html_file=html_file, verbose=verbose,
                         token=token)
 
                 else:
