@@ -20,6 +20,7 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
+import logging
 from io import BytesIO
 from socket import gaierror
 import tempfile
@@ -29,7 +30,6 @@ import lsst.afw.display.virtualDevice as virtualDevice
 import lsst.afw.display.ds9Regions as ds9Regions
 import lsst.afw.display as afwDisplay
 import lsst.afw.math as afwMath
-import lsst.log
 
 from .footprints import createFootprintsTable
 
@@ -39,6 +39,8 @@ try:
 except ImportError as e:
     raise RuntimeError("Cannot import firefly_client: %s" % (e))
 from ws4py.client import HandshakeError
+
+_LOG = logging.getLogger(__name__)
 
 
 class FireflyError(Exception):
@@ -59,18 +61,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def __handleCallbacks(event):
         if 'type' in event['data']:
             if event['data']['type'] == 'AREA_SELECT':
-                lsst.log.debug('*************area select')
+                _LOG.debug('*************area select')
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
                 plot_id = 3
                 global _fireflyClient
                 _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
-        lsst.log.debug("Callback event info: {}".format(event))
+        _LOG.debug("Callback event info: %s", event)
         return
         data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
         if data.get('type') == "POINT":
-            lsst.log.debug("Event Received: %s" % data.get('id'))
+            _LOG.debug("Event Received: %s", data.get('id'))
 
     def __init__(self, display, verbose=False, url=None,
                  name=None, *args, **kwargs):
