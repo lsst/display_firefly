@@ -54,9 +54,10 @@ def recordSelector(record, selection):
     elif selection == 'isolated':
         return ((parentId == 0) and (nChildren == 0))
     else:
-        raise RuntimeError('invalid selection: {}'.format(selection) +
-                           '\nMust be one of "all", "blended parents", ' +
-                           '"deblended children", "isolated"')
+        raise RuntimeError(
+            f'invalid selection: {selection}\n'
+            'Must be one of "all", "blended parents", "deblended children", "isolated"'
+        )
 
 
 def createFootprintsTable(catalog, xy0=None, insertColumn=4):

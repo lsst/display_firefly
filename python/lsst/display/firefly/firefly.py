@@ -20,6 +20,7 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
+import logging
 from io import BytesIO
 from socket import gaierror
 import tempfile
@@ -29,7 +30,6 @@ import lsst.afw.display.virtualDevice as virtualDevice
 import lsst.afw.display.ds9Regions as ds9Regions
 import lsst.afw.display as afwDisplay
 import lsst.afw.math as afwMath
-import lsst.log
 
 from .footprints import createFootprintsTable
 
@@ -37,8 +37,10 @@ try:
     import firefly_client
     _fireflyClient = None
 except ImportError as e:
-    raise RuntimeError("Cannot import firefly_client: %s" % (e))
+    raise RuntimeError(f"Cannot import firefly_client: {e}")
 from ws4py.client import HandshakeError
+
+_LOG = logging.getLogger(__name__)
 
 
 class FireflyError(Exception):
@@ -59,18 +61,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def __handleCallbacks(event):
         if 'type' in event['data']:
             if event['data']['type'] == 'AREA_SELECT':
-                lsst.log.debug('*************area select')
+                _LOG.debug('*************area select')
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
                 plot_id = 3
                 global _fireflyClient
                 _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
-        lsst.log.debug("Callback event info: {}".format(event))
+        _LOG.debug("Callback event info: %s", event)
         return
-        data = dict((_.split('=') for _ in event.get('data', {}).split('&')))
+        data = dict(_.split('=') for _ in event.get('data', {}).split('&'))
         if data.get('type') == "POINT":
-            lsst.log.debug("Event Received: %s" % data.get('id'))
+            _LOG.debug("Event Received: %s", data.get('id'))
 
     def __init__(self, display, verbose=False, url=None,
                  name=None, *args, **kwargs):
@@ -119,14 +121,13 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                         token=token)
 
             except (HandshakeError, gaierror) as e:
-                raise RuntimeError("Unable to connect to %s: %s" % (url or '', e))
+                raise RuntimeError(f"Unable to connect to {url or ''}: {e}")
 
             try:
                 _fireflyClient.add_listener(self.__handleCallbacks)
             except Exception as e:
-                raise RuntimeError("Cannot add listener. Browser must be connected" +
-                                   "to %s: %s" %
-                                   (_fireflyClient.get_firefly_url(), e))
+                raise RuntimeError("Cannot add listener. Browser must be connected"
+                                   f"to {_fireflyClient.get_firefly_url()}: {e}")
 
         self._isBuffered = False
         self._regions = []
@@ -145,7 +146,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._lastStretch = None
 
     def _getRegionLayerId(self):
-        return "lsstRegions%s" % self.display.frame if self.display else "None"
+        return f"lsstRegions{self.display.frame}" if self.display else "None"
 
     def _clearImage(self):
         """Delete the current image in the Firefly viewer
@@ -170,10 +171,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
 
             try:
-                viewer_id = ('image-' + str(_fireflyClient.render_tree_id) + '-' +
-                             str(self.frame))
+                viewer_id = f'image-{_fireflyClient.render_tree_id}-{self.frame}'
             except AttributeError:
-                viewer_id = 'image-' + str(self.frame)
+                viewer_id = f'image-{self.frame}'
             extraParams = dict(Title=title,
                                MultiImageIdx=0,
                                PredefinedOverlayIds=' ',
@@ -185,8 +185,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 extraParams['InitZoomLevel'] = self._lastZoom
                 extraParams['ZoomType'] = 'LEVEL'
             if self._lastPan:
-                extraParams['InitialCenterPosition'] = '{0:.3f};{1:.3f};PIXEL'.format(
-                    self._lastPan[0], self._lastPan[1])
+                extraParams['InitialCenterPosition'] = f'{self._lastPan[0]:.3f};{self._lastPan[1]:.3f};PIXEL'
             if self._lastStretch:
                 extraParams['RangeValues'] = self._lastStretch
 
@@ -293,7 +292,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     def _erase(self):
         """Erase all overlays on the image"""
         if self.verbose:
-            print('region layer id is {}'.format(self._regionLayerId))
+            print(f'region layer id is {self._regionLayerId}')
         if self._regionLayerId:
             _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
 
@@ -306,10 +305,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 if not status['success']:
                     pass
             except Exception as e:
-                raise RuntimeError("Cannot set callback. Browser must be (re)opened " +
-                                   "to %s%s : %s" %
-                                   (_fireflyClient.url_bw,
-                                    _fireflyClient.channel, e))
+                raise RuntimeError("Cannot set callback. Browser must be (re)opened "
+                                   f"to {_fireflyClient.url_bw}{_fireflyClient.channel} : {e}")
 
     def _getEvent(self):
         """Return an event generated by a keypress or mouse click
@@ -317,7 +314,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         ev = interface.Event("q")
 
         if self.verbose:
-            print("virtual[%s]._getEvent() -> %s" % (self.display.frame, ev))
+            print(f"virtual[{self.display.frame}]._getEvent() -> {ev}")
 
         return ev
     #
@@ -367,8 +364,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             algorithm = dict((a.lower(), a) for a in stretch_algorithms).get(algorithm.lower(), algorithm)
 
             if algorithm not in stretch_algorithms:
-                raise FireflyError('Algorithm %s is invalid; please choose one of "%s"' %
-                                   (algorithm, '", "'.join(stretch_algorithms)))
+                raise FireflyError(
+                    'Algorithm {} is invalid; please choose one of "{}"'.format(
+                        algorithm, '", "'.join(stretch_algorithms)
+                    )
+                )
             self._stretchAlgorithm = algorithm
         else:
             algorithm = 'linear'
@@ -396,7 +396,9 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         units = ('percent', 'absolute', 'sigma')
         if unit not in units:
-            raise FireflyError('Unit %s is invalid; please choose one of "%s"' % (unit, '", "'.join(units)))
+            raise FireflyError(
+                'Unit {} is invalid; please choose one of "{}"'.format(unit, '", "'.join(units))
+            )
 
         if unit == 'sigma':
             interval_type = 'sigma'
@@ -410,7 +412,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._stretchUnit = unit
 
         if interval_type not in interval_methods:
-            raise FireflyError('Interval method %s is invalid' % interval_type)
+            raise FireflyError(f'Interval method {interval_type} is invalid')
 
         rval = {}
         if interval_type != 'zscale':

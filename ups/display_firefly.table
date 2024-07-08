@@ -1,5 +1,4 @@
 setupRequired(afw)
 setupRequired(geom)
-setupRequired(log)
 
 envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
