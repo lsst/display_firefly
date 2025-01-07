@@ -17,3 +17,4 @@ tests/.tests
 ups/*.cfgc
 _build.*
 _eupspkg
+python/*.dist-info/
