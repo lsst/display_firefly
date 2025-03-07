@@ -154,7 +154,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._client.dispatch(action_type='ImagePlotCntlr.deletePlotView',
                               payload=dict(plotId=str(self.display.frame)))
 
-    def _mtv(self, image, mask=None, wcs=None, title=""):
+    def _mtv(self, image, mask=None, wcs=None, title="", metadata=None):
         """Display an Image and/or Mask on a Firefly display
         """
         if title == "":
@@ -165,7 +165,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             self._erase()
 
             with tempfile.NamedTemporaryFile() as fd:
-                afwDisplay.writeFitsImage(fd.name, image, wcs, title)
+                afwDisplay.writeFitsImage(fd.name, image, wcs, title, metadata=metadata)
                 fd.flush()
                 fd.seek(0, 0)
                 self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
@@ -199,7 +199,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if self.verbose:
                 print('displaying mask')
             with tempfile.NamedTemporaryFile() as fdm:
-                afwDisplay.writeFitsImage(fdm.name, mask, wcs, title)
+                afwDisplay.writeFitsImage(fdm.name, mask, wcs, title, metadata=metadata)
                 fdm.flush()
                 fdm.seek(0, 0)
                 self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
