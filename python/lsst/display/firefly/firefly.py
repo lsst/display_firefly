@@ -23,7 +23,6 @@
 import logging
 from io import BytesIO
 from socket import gaierror
-import tempfile
 
 import lsst.afw.display.interface as interface
 import lsst.afw.display.virtualDevice as virtualDevice
@@ -154,7 +153,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._client.dispatch(action_type='ImagePlotCntlr.deletePlotView',
                               payload=dict(plotId=str(self.display.frame)))
 
-    def _mtv(self, image, mask=None, wcs=None, title=""):
+    def _mtv(self, image, mask=None, wcs=None, title="", metadata=None):
         """Display an Image and/or Mask on a Firefly display
         """
         if title == "":
@@ -164,11 +163,10 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 print('displaying image')
             self._erase()
 
-            with tempfile.NamedTemporaryFile() as fd:
-                afwDisplay.writeFitsImage(fd.name, image, wcs, title)
-                fd.flush()
+            with BytesIO() as fd:
+                afwDisplay.writeFitsImage(fd, image, wcs, title, metadata=metadata)
                 fd.seek(0, 0)
-                self._fireflyFitsID = _fireflyClient.upload_data(fd, 'FITS')
+                self._fireflyFitsID = _fireflyClient.upload_fits_data(fd)
 
             try:
                 viewer_id = f'image-{_fireflyClient.render_tree_id}-{self.frame}'
@@ -198,11 +196,10 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         if mask:
             if self.verbose:
                 print('displaying mask')
-            with tempfile.NamedTemporaryFile() as fdm:
-                afwDisplay.writeFitsImage(fdm.name, mask, wcs, title)
-                fdm.flush()
+            with BytesIO() as fdm:
+                afwDisplay.writeFitsImage(fdm, mask, wcs, title, metadata=metadata)
                 fdm.seek(0, 0)
-                self._fireflyMaskOnServer = _fireflyClient.upload_data(fdm, 'FITS')
+                self._fireflyMaskOnServer = _fireflyClient.upload_fits_data(fdm)
 
             maskPlaneDict = mask.getMaskPlaneDict()
             for k, v in maskPlaneDict.items():
