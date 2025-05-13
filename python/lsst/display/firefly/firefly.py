@@ -592,3 +592,36 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                                         highlightColor=highlightColor,
                                         selectColor=selectColor,
                                         style=style)
+
+    def alignImages(self, match_type="Standard", lock_match=True):
+        """Align and optionally lock the orientation of the images being
+        displayed.
+
+        See the Firefly native docs for additional kwargs reference:
+        https://caltech-ipac.github.io/firefly_client/api/firefly_client.FireflyClient.html#firefly_client.FireflyClient.align_images
+
+        Parameters
+        ----------
+        match_type : `str`, optional
+            Match type to use to align the images: align by WCS (‘Standard’),
+            by target (‘Target’), by pixel prigins (‘Pixel’), and by pixel at
+            image centers (‘PixelCenter’).
+        lock_match : `bool`, optional
+            Whether to lock the alignment. Panning/zooming in one image will
+            preserve the alignment in other images.
+
+        Returns
+        -------
+        out : `dict`
+            Status of the request.
+
+        Raises
+        ------
+        ValueError
+            Raised if match_type is not one of the allowed values.
+        """
+        types = {"Standard", "Target", "Pixel", "PixelCenter"}
+        if match_type not in types:
+            raise ValueError(f"match_type={match_type} not allowed from expected types: {types}.")
+
+        return self._client.align_images(match_type=match_type, lock_match=lock_match)
