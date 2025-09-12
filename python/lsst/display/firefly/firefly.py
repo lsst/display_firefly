@@ -64,7 +64,6 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
                 plot_id = 3
-                global _fireflyClient
                 _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
         _LOG.debug("Callback event info: %s", event)
