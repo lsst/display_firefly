@@ -64,7 +64,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 pParams = {'URL': 'http://web.ipac.caltech.edu/staff/roby/demo/wise-m51-band2.fits',
                            'ColorTable': '9'}
                 plot_id = 3
-                _fireflyClient.show_fits(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
+                _fireflyClient.show_fits_image(fileOnServer=None, plot_id=plot_id, additionalParams=pParams)
 
         _LOG.debug("Callback event info: %s", event)
         return
@@ -186,8 +186,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             if self._lastStretch:
                 extraParams['RangeValues'] = self._lastStretch
 
-            ret = _fireflyClient.show_fits(self._fireflyFitsID, plot_id=str(self.display.frame),
-                                           **extraParams)
+            ret = _fireflyClient.show_fits_image(self._fireflyFitsID, plot_id=str(self.display.frame),
+                                                 **extraParams)
 
             if not ret["success"]:
                 raise RuntimeError("Display of image failed")
