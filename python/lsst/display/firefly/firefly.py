@@ -57,6 +57,18 @@ class DisplayImpl(virtualDevice.DisplayImpl):
     """Device to talk to a firefly display"""
 
     @staticmethod
+    def _scoped_mask_id(frame, plane_name):
+        """Build a server-side mask layer id that is unique per frame.
+
+        The Firefly server keys mask overlays by ``mask_id`` alone, so two
+        frames that both register a layer named e.g. ``"DETECTED"`` would
+        overwrite each other.  Prefixing the plane name with the frame number
+        keeps each frame's layers independent while remaining human-readable
+        in Firefly's layer panel.
+        """
+        return f"f{frame}__{plane_name}"
+
+    @staticmethod
     def __handleCallbacks(event):
         if 'type' in event['data']:
             if event['data']['type'] == 'AREA_SELECT':
@@ -213,19 +225,30 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                     _fireflyClient.add_mask(bit_number=self._maskDict[k],
                                             image_number=0,
                                             plot_id=str(self.display.frame),
-                                            mask_id=k,
+                                            mask_id=self._scoped_mask_id(self.display.frame, k),
                                             title=k + ' - bit %d'%self._maskDict[k],
                                             color=self._maskPlaneColors[k],
                                             file_on_server=self._fireflyMaskOnServer)
                     if k in self._maskTransparencies:
                         self._setMaskTransparency(self._maskTransparencies[k], k)
-                    self._maskIds.append(k)
+                    self._maskIds.append((self.display.frame, k))
 
     def _remove_masks(self):
-        """Remove mask layers"""
-        for k in self._maskIds:
-            _fireflyClient.remove_mask(plot_id=str(self.display.frame), mask_id=k)
-        self._maskIds = []
+        """Remove mask layers for the current frame.
+
+        Layers belonging to other frames are left in place; otherwise
+        loading a new image in one frame would clear the mask overlays
+        of every other displayed frame.
+        """
+        frame = self.display.frame
+        kept = []
+        for f, name in self._maskIds:
+            if f == frame:
+                _fireflyClient.remove_mask(plot_id=str(frame),
+                                           mask_id=self._scoped_mask_id(f, name))
+            else:
+                kept.append((f, name))
+        self._maskIds = kept
 
     def _buffer(self, enable=True):
         """!Enable or disable buffering of writes to the display
@@ -429,16 +452,24 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             self._lastStretch = rval['rv_string']
 
     def _setMaskTransparency(self, transparency, maskName):
-        """Specify mask transparency (percent); or None to not set it when loading masks"""
+        """Specify mask transparency (percent); or None to not set it when loading masks.
+
+        Operates on the current frame.  ``_maskIds`` holds ``(frame, name)``
+        tuples (recorded by ``_mtv``); we filter those to the current frame.
+        Plane names from ``_defaultMaskPlaneColor`` are also included, scoped
+        to the current frame.
+        """
+        frame = self.display.frame
         if maskName is not None:
-            masklist = [maskName]
+            names = [maskName]
         else:
-            masklist = set(self._maskIds + list(self.display._defaultMaskPlaneColor.keys()))
-        for k in masklist:
+            names = {name for f, name in self._maskIds if f == frame}
+            names.update(self.display._defaultMaskPlaneColor.keys())
+        for k in names:
             self._maskTransparencies[k] = transparency
             _fireflyClient.dispatch(action_type='ImagePlotCntlr.overlayPlotChangeAttributes',
-                                    payload={'plotId': str(self.display.frame),
-                                             'imageOverlayId': k,
+                                    payload={'plotId': str(frame),
+                                             'imageOverlayId': self._scoped_mask_id(frame, k),
                                              'attributes': {'opacity': 1.0 - transparency/100.},
                                              'doReplot': False})
 
@@ -450,15 +481,17 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         return transparency
 
     def _setMaskPlaneColor(self, maskName, color):
-        """Specify mask color """
-        _fireflyClient.remove_mask(plot_id=str(self.display.frame),
-                                   mask_id=maskName)
+        """Specify mask color for the current frame.
+        """
+        frame = self.display.frame
+        scoped_id = self._scoped_mask_id(frame, maskName)
+        _fireflyClient.remove_mask(plot_id=str(frame), mask_id=scoped_id)
         self._maskPlaneColors[maskName] = color
         if (color.lower() != 'ignore'):
             _fireflyClient.add_mask(bit_number=self._maskDict[maskName],
                                     image_number=1,
-                                    plot_id=str(self.display.frame),
-                                    mask_id=maskName,
+                                    plot_id=str(frame),
+                                    mask_id=scoped_id,
                                     color=self.display.getMaskPlaneColor(maskName),
                                     file_on_server=self._fireflyFitsID)
 
