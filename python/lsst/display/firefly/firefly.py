@@ -22,6 +22,7 @@
 
 import logging
 import threading
+import time
 from io import BytesIO
 from socket import gaierror
 
@@ -51,6 +52,12 @@ _REGION_FLUSH_DELAY = 0.1
 # A coalescing buffer that grows beyond this is sent immediately
 # rather than waiting for the timer.
 _MAX_PENDING_REGIONS = 5000
+# Uploaded FITS data is reused (keyed by content hash) for this many
+# seconds before being uploaded again.
+_UPLOAD_CACHE_TTL = 900
+_UPLOAD_CACHE_MAXSIZE = 32
+# Cache of recent uploads: content hash -> (server path, upload time).
+_uploadCache = {}
 
 
 class FireflyError(Exception):
@@ -177,6 +184,40 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._client.dispatch(action_type='ImagePlotCntlr.deletePlotView',
                               payload=dict(plotId=str(self.display.frame)))
 
+    def _uploadFitsCached(self, fd):
+        """Upload in-memory FITS data, reusing a recent identical upload.
+
+        ``mtv`` is frequently re-run on the same image or mask (e.g. to
+        change a stretch or mask colors); re-uploading a multi-megabyte
+        FITS file each time wastes bandwidth and server requests.
+        Uploads are keyed by content hash (the built-in ``hash``,
+        which is randomized per process -- fine for this per-process
+        cache) and reused while fresh enough that the server will not
+        have cleaned its upload area.
+
+        Parameters
+        ----------
+        fd : `io.BytesIO`
+            In-memory FITS file to upload.
+
+        Returns
+        -------
+        path : `str`
+            Path of the uploaded file on the Firefly server.
+        """
+        key = hash(fd.getvalue())
+        now = time.monotonic()
+        cached = _uploadCache.get(key)
+        if cached is not None and now - cached[1] < _UPLOAD_CACHE_TTL:
+            return cached[0]
+        fd.seek(0, 0)
+        path = _fireflyClient.upload_fits_data(fd)
+        _uploadCache[key] = (path, now)
+        while len(_uploadCache) > _UPLOAD_CACHE_MAXSIZE:
+            oldest = min(_uploadCache, key=lambda k: _uploadCache[k][1])
+            del _uploadCache[oldest]
+        return path
+
     def _mtv(self, image, mask=None, wcs=None, title="", metadata=None):
         """Display an Image and/or Mask on a Firefly display
         """
@@ -189,8 +230,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
             with BytesIO() as fd:
                 afwDisplay.writeFitsImage(fd, image, wcs, title, metadata=metadata)
-                fd.seek(0, 0)
-                self._fireflyFitsID = _fireflyClient.upload_fits_data(fd)
+                self._fireflyFitsID = self._uploadFitsCached(fd)
 
             try:
                 viewer_id = f'image-{_fireflyClient.render_tree_id}-{self.frame}'
@@ -222,8 +262,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
                 print('displaying mask')
             with BytesIO() as fdm:
                 afwDisplay.writeFitsImage(fdm, mask, wcs, title, metadata=metadata)
-                fdm.seek(0, 0)
-                self._fireflyMaskOnServer = _fireflyClient.upload_fits_data(fdm)
+                self._fireflyMaskOnServer = self._uploadFitsCached(fdm)
 
             maskPlaneDict = mask.getMaskPlaneDict()
             for k, v in maskPlaneDict.items():

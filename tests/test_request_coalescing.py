@@ -20,15 +20,16 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
-"""Tests for the coalescing of region uploads sent to the Firefly
-server.  Rapid-fire small requests (one per ``dot()`` call) have been
-mistaken for denial-of-service attacks by site security, so the
-batching behavior matters beyond efficiency.
+"""Tests for the request-traffic mitigations: coalescing of region
+uploads and reuse of identical FITS uploads.  Rapid-fire small
+requests have been mistaken for denial-of-service attacks by site
+security, so the batching behavior matters beyond efficiency.
 """
 
 import threading
 import time
 import unittest
+from io import BytesIO
 from types import SimpleNamespace
 from unittest import mock
 
@@ -121,6 +122,53 @@ class RegionCoalescingTest(unittest.TestCase):
             _flushDelay()
             self.assertEqual(client.add_region_data.call_count, 0)
         self.assertEqual(impl._regions, [])
+
+
+class UploadCacheTest(unittest.TestCase):
+    """Identical FITS data must not be re-uploaded within the reuse
+    window; distinct or expired data must be."""
+
+    def setUp(self):
+        firefly_mod._uploadCache.clear()
+
+    def tearDown(self):
+        firefly_mod._uploadCache.clear()
+
+    def test_identical_upload_reused(self):
+        impl = _make_impl()
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client:
+            client.upload_fits_data.return_value = "${upload}/file1.fits"
+            path1 = impl._uploadFitsCached(BytesIO(b"FITS data"))
+            path2 = impl._uploadFitsCached(BytesIO(b"FITS data"))
+            self.assertEqual(client.upload_fits_data.call_count, 1)
+        self.assertEqual(path1, path2)
+
+    def test_different_data_uploads_again(self):
+        impl = _make_impl()
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client:
+            client.upload_fits_data.side_effect = ["${upload}/a.fits", "${upload}/b.fits"]
+            path1 = impl._uploadFitsCached(BytesIO(b"FITS data A"))
+            path2 = impl._uploadFitsCached(BytesIO(b"FITS data B"))
+            self.assertEqual(client.upload_fits_data.call_count, 2)
+        self.assertNotEqual(path1, path2)
+
+    def test_expired_entry_is_reuploaded(self):
+        impl = _make_impl()
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client, \
+                mock.patch.object(firefly_mod, "_UPLOAD_CACHE_TTL", 0):
+            client.upload_fits_data.return_value = "${upload}/file1.fits"
+            impl._uploadFitsCached(BytesIO(b"FITS data"))
+            impl._uploadFitsCached(BytesIO(b"FITS data"))
+            self.assertEqual(client.upload_fits_data.call_count, 2)
+
+    def test_cache_size_is_bounded(self):
+        impl = _make_impl()
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client, \
+                mock.patch.object(firefly_mod, "_UPLOAD_CACHE_MAXSIZE", 2):
+            client.upload_fits_data.side_effect = [f"${{upload}}/{i}.fits" for i in range(3)]
+            for i in range(3):
+                impl._uploadFitsCached(BytesIO(b"FITS data %d" % i))
+        self.assertLessEqual(len(firefly_mod._uploadCache), 2)
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
