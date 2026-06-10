@@ -21,6 +21,7 @@
 #
 
 import logging
+import threading
 from io import BytesIO
 from socket import gaierror
 
@@ -40,6 +41,16 @@ except ImportError as e:
 from ws4py.client import HandshakeError
 
 _LOG = logging.getLogger(__name__)
+
+# Region uploads triggered while unbuffered (e.g. one ``dot()`` per
+# catalog source in a loop) are coalesced for this many seconds and
+# sent as a single batched request.  One HTTP request per region is
+# enough traffic for security appliances to mistake a busy notebook
+# for a denial-of-service attack.
+_REGION_FLUSH_DELAY = 0.1
+# A coalescing buffer that grows beyond this is sent immediately
+# rather than waiting for the timer.
+_MAX_PENDING_REGIONS = 5000
 
 
 class FireflyError(Exception):
@@ -141,6 +152,8 @@ class DisplayImpl(virtualDevice.DisplayImpl):
 
         self._isBuffered = False
         self._regions = []
+        self._regionLock = threading.Lock()
+        self._regionFlushTimer = None
         self._regionLayerId = self._getRegionLayerId()
         self._fireflyFitsID = None
         self._fireflyMaskOnServer = None
@@ -256,31 +269,84 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """
         self._isBuffered = enable
 
+    def _scheduleRegionFlush(self):
+        """Schedule a deferred flush of accumulated region data.
+
+        Caller must hold ``_regionLock``.
+        """
+        if self._regionFlushTimer is None:
+            timer = threading.Timer(_REGION_FLUSH_DELAY, self._flushFromTimer)
+            timer.daemon = True
+            self._regionFlushTimer = timer
+            timer.start()
+
+    def _cancelRegionFlushLocked(self):
+        """Cancel any scheduled region flush.
+
+        Caller must hold ``_regionLock``.
+        """
+        if self._regionFlushTimer is not None:
+            self._regionFlushTimer.cancel()
+            self._regionFlushTimer = None
+
+    def _flushFromTimer(self):
+        """Timer-thread entry point for deferred region flushes.
+
+        Exceptions cannot propagate usefully out of the timer thread,
+        so log them instead.
+        """
+        try:
+            self._flush()
+        except Exception:
+            _LOG.exception("Deferred flush of region data failed")
+
     def _flush(self):
         """!Flush any I/O buffers
         """
-        if not self._regions:
-            return
+        with self._regionLock:
+            self._cancelRegionFlushLocked()
+            regions = self._regions
+            self._regions = []
+            if not regions:
+                return
 
-        if self.verbose:
-            print("Flushing %d regions" % len(self._regions))
-            print(self._regions)
+            if self.verbose:
+                print("Flushing %d regions" % len(regions))
+                print(regions)
 
-        self._regionLayerId = self._getRegionLayerId()
-        _fireflyClient.add_region_data(region_data=self._regions, plot_id=str(self.display.frame),
-                                       region_layer_id=self._regionLayerId)
-        self._regions = []
+            self._regionLayerId = self._getRegionLayerId()
+            # The upload happens while the lock is held so that a
+            # deferred flush from the timer thread cannot interleave
+            # with an _erase() issued from another thread.
+            _fireflyClient.add_region_data(region_data=regions, plot_id=str(self.display.frame),
+                                           region_layer_id=self._regionLayerId)
 
     def _uploadTextData(self, regions):
-        self._regions += regions
-
-        if not self._isBuffered:
+        sendNow = False
+        with self._regionLock:
+            self._regions += regions
+            if not self._isBuffered:
+                # Coalesce rapid successive calls (one network request
+                # per dot() floods the server) and send a single batch
+                # shortly afterwards; oversized buffers go immediately.
+                if len(self._regions) >= _MAX_PENDING_REGIONS:
+                    sendNow = True
+                else:
+                    self._scheduleRegionFlush()
+        if sendNow:
             self._flush()
 
     def _close(self):
         """Called when the device is closed"""
         if self.verbose:
             print("Closing firefly device %s" % (self.display.frame if self.display else "[None]"))
+        try:
+            self._flush()
+        except Exception:
+            # The device may be closing because the connection (or the
+            # interpreter) is going away; losing unflushed regions then
+            # is preferable to raising from __del__.
+            _LOG.debug("Could not flush pending regions on close", exc_info=True)
         if _fireflyClient is not None:
             _fireflyClient.disconnect()
             _fireflyClient.session.close()
@@ -312,8 +378,17 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         """Erase all overlays on the image"""
         if self.verbose:
             print(f'region layer id is {self._regionLayerId}')
-        if self._regionLayerId:
-            _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
+        with self._regionLock:
+            self._cancelRegionFlushLocked()
+            if not self._isBuffered:
+                # Unbuffered pending regions exist only because of
+                # flush coalescing; they would be deleted again right
+                # below, so drop them instead of sending them.  When
+                # buffered, regions are kept for the explicit flush,
+                # matching the original buffering semantics.
+                self._regions = []
+            if self._regionLayerId:
+                _fireflyClient.delete_region_layer(self._regionLayerId, plot_id=str(self.display.frame))
 
     def _setCallback(self, what, func):
         if func != interface.noop_callback:
