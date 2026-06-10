@@ -171,6 +171,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
         self._maskDict = {}
         self._maskPlaneColors = {}
         self._maskTransparencies = {}
+        self._visibleMaskPlanes = None
         self._lastZoom = None
         self._lastPan = None
         self._lastStretch = None
@@ -217,6 +218,11 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             oldest = min(_uploadCache, key=lambda k: _uploadCache[k][1])
             del _uploadCache[oldest]
         return path
+
+    def _maskPlaneVisible(self, maskName):
+        """Return whether ``mtv`` should display the given mask plane.
+        """
+        return self._visibleMaskPlanes is None or maskName in self._visibleMaskPlanes
 
     def _mtv(self, image, mask=None, wcs=None, title="", metadata=None):
         """Display an Image and/or Mask on a Firefly display
@@ -271,6 +277,7 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             usedPlanes = int(afwMath.makeStatistics(mask, afwMath.SUM).getValue())
             for k in self._maskDict:
                 if (((1 << self._maskDict[k]) & usedPlanes) and
+                        self._maskPlaneVisible(k) and
                         (k in self._maskPlaneColors) and
                         (self._maskPlaneColors[k] is not None) and
                         (self._maskPlaneColors[k].lower() != 'ignore')):
@@ -659,6 +666,30 @@ class DisplayImpl(virtualDevice.DisplayImpl):
             Instance of FireflyClient used by this display
         """
         return self._client
+
+    def setVisibleMaskPlanes(self, planes=None):
+        """Restrict which mask planes are displayed by ``mtv``.
+
+        Every displayed mask plane becomes a separate overlay plot in
+        Firefly, each costing its own server requests and data
+        transfers; limiting the planes shown cuts that traffic
+        proportionally.
+
+        Parameters
+        ----------
+        planes : iterable of `str`, optional
+            Names of the mask planes to display, e.g.
+            ``["DETECTED", "SAT"]``.  `None` (the default) restores
+            the standard behavior of displaying every plane present.
+
+        Notes
+        -----
+        Affects subsequent calls to ``mtv`` only; overlays already
+        shown are left in place.  Mask planes can also be suppressed
+        individually by setting their color to ``'ignore'`` with
+        ``setMaskPlaneColor``.
+        """
+        self._visibleMaskPlanes = None if planes is None else frozenset(planes)
 
     def clearViewer(self):
         """Reinitialize the viewer

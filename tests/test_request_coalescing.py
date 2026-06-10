@@ -21,9 +21,10 @@
 #
 
 """Tests for the request-traffic mitigations: coalescing of region
-uploads and reuse of identical FITS uploads.  Rapid-fire small
-requests have been mistaken for denial-of-service attacks by site
-security, so the batching behavior matters beyond efficiency.
+uploads, reuse of identical FITS uploads, and restricting which mask
+planes ``mtv`` sends to the server.  Rapid-fire small requests have
+been mistaken for denial-of-service attacks by site security, so the
+batching behavior matters beyond efficiency.
 """
 
 import threading
@@ -34,6 +35,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import lsst.utils.tests
+import lsst.afw.image as afwImage
 from lsst.display.firefly import firefly as firefly_mod
 
 
@@ -57,6 +59,13 @@ def _make_impl(frame=0, buffered=False):
     impl._regionLock = threading.Lock()
     impl._regionFlushTimer = None
     impl._regionLayerId = f"lsstRegions{frame}"
+    impl._maskIds = []
+    impl._maskDict = {}
+    impl._maskPlaneColors = {}
+    impl._maskTransparencies = {}
+    impl._visibleMaskPlanes = None
+    impl._fireflyFitsID = None
+    impl._fireflyMaskOnServer = None
     return impl
 
 
@@ -169,6 +178,51 @@ class UploadCacheTest(unittest.TestCase):
             for i in range(3):
                 impl._uploadFitsCached(BytesIO(b"FITS data %d" % i))
         self.assertLessEqual(len(firefly_mod._uploadCache), 2)
+
+
+class VisibleMaskPlanesTest(unittest.TestCase):
+    """``setVisibleMaskPlanes`` limits which planes ``mtv`` turns into
+    Firefly overlay plots; each overlay costs its own server traffic."""
+
+    def setUp(self):
+        firefly_mod._uploadCache.clear()
+
+    def tearDown(self):
+        firefly_mod._uploadCache.clear()
+
+    @staticmethod
+    def _make_mask():
+        mask = afwImage.Mask(8, 8)
+        mask.array[0, 0] = mask.getPlaneBitMask("DETECTED")
+        mask.array[1, 1] = mask.getPlaneBitMask("SAT")
+        return mask
+
+    def test_default_shows_all_used_planes(self):
+        impl = _make_impl(frame=1)
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client:
+            client.upload_fits_data.return_value = "${upload}/mask.fits"
+            impl._mtv(None, mask=self._make_mask())
+            added = {c.kwargs["mask_id"] for c in client.add_mask.call_args_list}
+        self.assertEqual(added, {"f1__DETECTED", "f1__SAT"})
+
+    def test_filter_restricts_planes(self):
+        impl = _make_impl(frame=1)
+        impl.setVisibleMaskPlanes(["DETECTED"])
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client:
+            client.upload_fits_data.return_value = "${upload}/mask.fits"
+            impl._mtv(None, mask=self._make_mask())
+            added = {c.kwargs["mask_id"] for c in client.add_mask.call_args_list}
+        self.assertEqual(added, {"f1__DETECTED"})
+
+    def test_none_resets_filter(self):
+        impl = _make_impl(frame=1)
+        impl.setVisibleMaskPlanes(["DETECTED"])
+        impl.setVisibleMaskPlanes(None)
+        with mock.patch.object(firefly_mod, "_fireflyClient") as client:
+            client.upload_fits_data.return_value = "${upload}/mask.fits"
+            impl._mtv(None, mask=self._make_mask())
+            added = {c.kwargs["mask_id"] for c in client.add_mask.call_args_list}
+        self.assertEqual(added, {"f1__DETECTED", "f1__SAT"})
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
