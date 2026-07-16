@@ -144,8 +144,10 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
     sourceTable.add_column(Column(np.array(categoryList)),
                            name='category',
                            index=insertColumn+1)
-    sourceTable.add_column(Column(np.array(spanList)), name='spans')
-    sourceTable.add_column(Column(np.array(peakList)), name='peaks')
+    spanColumn = np.fromiter(spanList, dtype=object, count=len(spanList))
+    peakColumn = np.fromiter(peakList, dtype=object, count=len(peakList))
+    sourceTable.add_column(Column(spanColumn), name='spans')
+    sourceTable.add_column(Column(peakColumn), name='peaks')
     sourceTable.add_column(Column(np.array(fpxll)), name='footprint_corner1_x')
     sourceTable.add_column(Column(np.array(fpyll)), name='footprint_corner1_y')
     sourceTable.add_column(Column(np.array(fpxur)), name='footprint_corner2_x')
