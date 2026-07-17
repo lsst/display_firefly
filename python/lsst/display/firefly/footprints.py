@@ -43,7 +43,11 @@ def recordSelector(record, selection):
         meaning zero parents and zero children.
         Values to check for sel
     """
-    nChildren = record.get('deblend_nChild')
+    # Catalogs missing the 'deblend_nChild' column were not deblended
+    if 'deblend_nChild' in record.schema.getNames():
+        nChildren = record.get('deblend_nChild')
+    else:
+        nChildren = 0
     parentId = record.getParent()
     if selection == 'all':
         return True
@@ -93,6 +97,8 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
     inputColumnNames = sourceTable.colnames
 
     x0, y0 = xy0
+    # The 'deblend_nChild' column is only present if the catalog was deblended
+    isDeblended = 'deblend_nChild' in catalog.schema.getNames()
     spanList = []
     peakList = []
     familyList = []
@@ -122,7 +128,7 @@ def createFootprintsTable(catalog, xy0=None, insertColumn=4):
                                                            dtype=np.bool))
         fpbbox = footprint.getBBox()
         parentId = record.getParent()
-        nChild = record.get('deblend_nChild')
+        nChild = record.get('deblend_nChild') if isDeblended else 0
         if parentId == 0:
             familyList.append(recordId)
             if nChild > 0:
