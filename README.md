@@ -6,7 +6,7 @@ Firefly is IPAC's toolkit for construction of astronomical data user interfaces.
 
 ## Pointers to more information
 
-* Full documentation is available at https://pipelines.lsst.io/modules/lsst.display.firefly/ .
+* Full documentation is available at https://caltech-ipac.github.io/firefly_client/.
 * Within the Rubin Science Platform environment, suitable Firefly servers
   are provided by default, so that in many cases the user need not be aware
   of the identity or URL of the server.
